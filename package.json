@@ -3,21 +3,59 @@
   "version": "1.0.0",
   "description": "3D Wave Function Collapse implementation with Three.js",
   "type": "module",
+  "main": "./dist/lib/three-collapse.cjs",
+  "module": "./dist/lib/three-collapse.js",
+  "types": "./dist/lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/lib/index.d.ts",
+      "import": "./dist/lib/three-collapse.js",
+      "require": "./dist/lib/three-collapse.cjs"
+    }
+  },
+  "files": [
+    "dist/lib",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
+    "build": "npm run build:lib && npm run build:demos",
+    "build:lib": "tsc --project tsconfig.lib.json && vite build --config vite.lib.config.ts",
+    "build:demos": "vite build",
+    "preview": "vite preview",
+    "prepublishOnly": "npm run build:lib"
   },
-  "keywords": ["wfc", "three.js", "voxel", "procedural-generation"],
+  "keywords": [
+    "wfc",
+    "wave-function-collapse",
+    "three.js",
+    "threejs",
+    "3d",
+    "voxel",
+    "procedural-generation",
+    "glb",
+    "instanced-rendering"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/niko-dellic/three-collapse.git"
+  },
+  "bugs": {
+    "url": "https://github.com/niko-dellic/three-collapse/issues"
+  },
+  "homepage": "https://github.com/niko-dellic/three-collapse#readme",
   "author": "",
   "license": "MIT",
-  "dependencies": {
-    "three": "^0.180.0"
+  "peerDependencies": {
+    "three": ">=0.150.0"
   },
+  "dependencies": {},
   "devDependencies": {
     "@types/three": "^0.180.0",
+    "three": "^0.180.0",
     "typescript": "^5.9.3",
     "vite": "^7.1.9"
   }
 }
-

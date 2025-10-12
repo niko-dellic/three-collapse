@@ -17,11 +17,29 @@ A 3D Wave Function Collapse (WFC) implementation built with Three.js and TypeScr
 - **TypeScript**: Fully typed codebase
 - **Memory Efficient**: Uses InstancedMesh for rendering thousands of models
 
-## Getting Started
+## Installation
 
-### Installation
+### As a Library (npm package)
 
 ```bash
+npm install three-collapse three
+```
+
+Then import in your project:
+
+```typescript
+import { WFC3D, WFCTile3D, VoxelTile3DConfig } from "three-collapse";
+```
+
+See [`LIBRARY_USAGE.md`](./LIBRARY_USAGE.md) for complete usage examples.
+
+### For Development
+
+Clone the repository and install dependencies:
+
+```bash
+git clone https://github.com/yourusername/three-collapse.git
+cd three-collapse
 npm install
 ```
 

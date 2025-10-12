@@ -1,0 +1,42 @@
+# Development files
+node_modules/
+.vscode/
+.idea/
+*.log
+
+# Source maps (optional - include if you want them in the package)
+# *.map
+
+# Demo files
+examples/
+public/
+index.html
+models.html
+vite.config.ts
+vite.lib.config.ts
+
+# Build outputs (demos)
+dist/assets/
+dist/index.html
+dist/models.html
+
+# Documentation (optional - remove if you want to include)
+IMPLEMENTATION.md
+IMPLEMENTATION_MODEL_SUPPORT.md
+IMPLEMENTATION_SUMMARY.md
+CHANGES.md
+
+# Test files
+*.test.ts
+*.spec.ts
+__tests__/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Git
+.git/
+.gitignore
+
