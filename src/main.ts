@@ -1,7 +1,13 @@
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { voxelTileset } from "../examples/tiles/voxels/tileset";
 import type { VoxelTile3DConfig } from "./wfc3d";
+import {
+  createScene,
+  addLighting,
+  createResizeHandler,
+  createAnimationLoop,
+} from "./utils/SceneSetup";
 
 // Worker types
 interface ProgressMessage {
@@ -42,39 +48,29 @@ class VoxelDemo {
     // Create tile map
     this.tiles = new Map(voxelTileset.map((t: VoxelTile3DConfig) => [t.id, t]));
 
-    // Setup scene
-    this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x000000);
-    this.scene.fog = new THREE.Fog(0x000000, 10, 50);
+    // Setup scene, camera, renderer, and controls
+    const sceneSetup = createScene({
+      backgroundColor: 0x000000,
+      fogColor: 0x000000,
+      fogNear: 10,
+      fogFar: 50,
+      cameraPosition: { x: 15, y: 15, z: 15 },
+    });
 
-    // Setup camera
-    this.camera = new THREE.PerspectiveCamera(
-      60,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      1000
-    );
-    this.camera.position.set(15, 15, 15);
-    this.camera.lookAt(0, 0, 0);
+    this.scene = sceneSetup.scene;
+    this.camera = sceneSetup.camera;
+    this.renderer = sceneSetup.renderer;
+    this.controls = sceneSetup.controls;
 
-    // Setup renderer
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(window.devicePixelRatio);
-    document.body.appendChild(this.renderer.domElement);
-
-    // Setup controls
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.enableDamping = true;
-    this.controls.dampingFactor = 0.05;
-
-    // Add lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    this.scene.add(ambientLight);
-
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
-    directionalLight.position.set(10, 20, 10);
-    this.scene.add(directionalLight);
+    // Add lighting
+    addLighting(this.scene, {
+      ambient: { color: 0xffffff, intensity: 0.6 },
+      directional: {
+        color: 0xffffff,
+        intensity: 0.6,
+        position: { x: 10, y: 20, z: 10 },
+      },
+    });
 
     // Create voxel group
     this.voxelGroup = new THREE.Group();
@@ -91,50 +87,101 @@ class VoxelDemo {
     this.setupUI();
 
     // Handle window resize
-    window.addEventListener("resize", () => this.onWindowResize());
+    const resizeHandler = createResizeHandler(this.camera, this.renderer);
+    window.addEventListener("resize", resizeHandler);
 
     // Start animation
+    this.animate = createAnimationLoop(
+      this.renderer,
+      this.scene,
+      this.camera,
+      this.controls
+    );
     this.animate();
   }
 
   private setupUI(): void {
     // Create UI container
     const uiContainer = document.createElement("div");
-    uiContainer.style.position = "absolute";
-    uiContainer.style.top = "10px";
-    uiContainer.style.left = "10px";
-    uiContainer.style.padding = "15px";
-    uiContainer.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
-    uiContainer.style.color = "white";
-    uiContainer.style.fontFamily = "monospace";
-    uiContainer.style.borderRadius = "5px";
-    uiContainer.style.zIndex = "1000";
+    uiContainer.className = "ui-container voxel-demo";
     document.body.appendChild(uiContainer);
 
     // Title
     const title = document.createElement("h2");
+    title.className = "ui-title";
     title.textContent = "3D Wave Function Collapse";
-    title.style.margin = "0 0 10px 0";
     uiContainer.appendChild(title);
 
     // Info
     const info = document.createElement("div");
+    info.className = "grid-info";
     info.textContent = `Grid: ${this.width}×${this.height}×${this.depth}`;
-    info.style.marginBottom = "10px";
     uiContainer.appendChild(info);
+
+    // Grid size controls
+    const gridControlsTitle = document.createElement("div");
+    gridControlsTitle.className = "section-title";
+    gridControlsTitle.textContent = "Grid Size";
+    uiContainer.appendChild(gridControlsTitle);
+
+    // Width slider
+    const widthContainer = this.createSlider(
+      "Width",
+      this.width,
+      5,
+      50,
+      (value) => {
+        this.width = value;
+        info.textContent = `Grid: ${this.width}×${this.height}×${this.depth}`;
+        this.updateVoxelGroupPosition();
+      }
+    );
+    uiContainer.appendChild(widthContainer);
+
+    // Height slider
+    const heightContainer = this.createSlider(
+      "Height",
+      this.height,
+      3,
+      20,
+      (value) => {
+        this.height = value;
+        info.textContent = `Grid: ${this.width}×${this.height}×${this.depth}`;
+        this.updateVoxelGroupPosition();
+      }
+    );
+    uiContainer.appendChild(heightContainer);
+
+    // Depth slider
+    const depthContainer = this.createSlider(
+      "Depth",
+      this.depth,
+      5,
+      50,
+      (value) => {
+        this.depth = value;
+        info.textContent = `Grid: ${this.width}×${this.height}×${this.depth}`;
+        this.updateVoxelGroupPosition();
+      }
+    );
+    uiContainer.appendChild(depthContainer);
+
+    // Separator
+    const separator = document.createElement("hr");
+    uiContainer.appendChild(separator);
 
     // Seed input
     const seedContainer = document.createElement("div");
-    seedContainer.style.marginBottom = "10px";
+    seedContainer.className = "seed-container";
 
     const seedLabel = document.createElement("label");
+    seedLabel.className = "seed-label";
     seedLabel.textContent = "Seed: ";
     seedContainer.appendChild(seedLabel);
 
     const seedInput = document.createElement("input");
     seedInput.type = "number";
     seedInput.value = this.currentSeed.toString();
-    seedInput.style.width = "100px";
     seedInput.addEventListener("change", () => {
       this.currentSeed = parseInt(seedInput.value) || Date.now();
     });
@@ -145,17 +192,12 @@ class VoxelDemo {
     // Generate button
     const generateBtn = document.createElement("button");
     generateBtn.textContent = "Generate";
-    generateBtn.style.padding = "10px 20px";
-    generateBtn.style.marginRight = "5px";
-    generateBtn.style.cursor = "pointer";
     generateBtn.addEventListener("click", () => this.generate());
     uiContainer.appendChild(generateBtn);
 
     // Random seed button
     const randomBtn = document.createElement("button");
     randomBtn.textContent = "Random Seed";
-    randomBtn.style.padding = "10px 20px";
-    randomBtn.style.cursor = "pointer";
     randomBtn.addEventListener("click", () => {
       this.currentSeed = Date.now();
       seedInput.value = this.currentSeed.toString();
@@ -164,26 +206,18 @@ class VoxelDemo {
 
     // Progress bar
     const progressContainer = document.createElement("div");
-    progressContainer.style.marginTop = "10px";
-    progressContainer.style.display = "none";
+    progressContainer.className = "progress-container";
 
     const progressLabel = document.createElement("div");
+    progressLabel.className = "progress-label";
     progressLabel.textContent = "Generating...";
-    progressLabel.style.marginBottom = "5px";
     progressContainer.appendChild(progressLabel);
 
     const progressBar = document.createElement("div");
-    progressBar.style.width = "200px";
-    progressBar.style.height = "20px";
-    progressBar.style.backgroundColor = "#333";
-    progressBar.style.borderRadius = "3px";
-    progressBar.style.overflow = "hidden";
+    progressBar.className = "progress-bar";
 
     const progressFill = document.createElement("div");
-    progressFill.style.width = "0%";
-    progressFill.style.height = "100%";
-    progressFill.style.backgroundColor = "#4CAF50";
-    progressFill.style.transition = "width 0.3s";
+    progressFill.className = "progress-fill";
     progressBar.appendChild(progressFill);
 
     progressContainer.appendChild(progressBar);
@@ -201,7 +235,7 @@ class VoxelDemo {
     const generateBtn = (this as any).generateBtn as HTMLButtonElement;
 
     // Show progress
-    progressContainer.style.display = "block";
+    progressContainer.classList.add("visible");
     progressFill.style.width = "0%";
     generateBtn.disabled = true;
 
@@ -261,15 +295,62 @@ class VoxelDemo {
 
       progressFill.style.width = "100%";
       setTimeout(() => {
-        progressContainer.style.display = "none";
+        progressContainer.classList.remove("visible");
       }, 500);
     } catch (error) {
       console.error("Generation error:", error);
       alert(error instanceof Error ? error.message : "Generation failed");
-      progressContainer.style.display = "none";
+      progressContainer.classList.remove("visible");
     } finally {
       generateBtn.disabled = false;
     }
+  }
+
+  private createSlider(
+    label: string,
+    value: number,
+    min: number,
+    max: number,
+    onChange: (value: number) => void
+  ): HTMLDivElement {
+    const container = document.createElement("div");
+    container.className = "slider-container";
+
+    const labelRow = document.createElement("div");
+    labelRow.className = "slider-label-row";
+
+    const labelEl = document.createElement("label");
+    labelEl.textContent = label;
+    labelRow.appendChild(labelEl);
+
+    const valueEl = document.createElement("span");
+    valueEl.className = "slider-value";
+    valueEl.textContent = value.toString();
+    labelRow.appendChild(valueEl);
+
+    container.appendChild(labelRow);
+
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.min = min.toString();
+    slider.max = max.toString();
+    slider.value = value.toString();
+    slider.addEventListener("input", () => {
+      const newValue = parseInt(slider.value);
+      valueEl.textContent = newValue.toString();
+      onChange(newValue);
+    });
+
+    container.appendChild(slider);
+    return container;
+  }
+
+  private updateVoxelGroupPosition(): void {
+    this.voxelGroup.position.set(
+      (-this.width * this.voxelSize) / 2,
+      (-this.height * this.voxelSize) / 2,
+      (-this.depth * this.voxelSize) / 2
+    );
   }
 
   private renderVoxels(data: string[][][]): void {
@@ -314,17 +395,7 @@ class VoxelDemo {
     }
   }
 
-  private onWindowResize(): void {
-    this.camera.aspect = window.innerWidth / window.innerHeight;
-    this.camera.updateProjectionMatrix();
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-  }
-
-  private animate = (): void => {
-    requestAnimationFrame(this.animate);
-    this.controls.update();
-    this.renderer.render(this.scene, this.camera);
-  };
+  private animate: () => void;
 }
 
 // Initialize demo

@@ -1,9 +1,15 @@
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { simpleModelTileset } from "../tiles/models/tileset";
 import { GLBTileLoader } from "../../src/loaders/GLBTileLoader";
 import { InstancedModelRenderer } from "../../src/renderers/InstancedModelRenderer";
 import type { ModelTile3DConfig } from "../../src/wfc3d";
+import {
+  createScene,
+  addLighting,
+  createResizeHandler,
+  createAnimationLoop,
+} from "../../src/utils/SceneSetup";
 
 // Worker types
 interface ProgressMessage {
@@ -42,127 +48,152 @@ class ModelDemo {
   private tiles: ModelTile3DConfig[];
   private currentSeed: number = Date.now();
   private isLoading: boolean = false;
+  private animate: () => void;
+
+  private statusContainer: HTMLDivElement;
+  private statusText: HTMLDivElement;
+  private progressFill: HTMLDivElement;
+  private generateBtn: HTMLButtonElement;
+  private randomBtn: HTMLButtonElement;
 
   constructor() {
     this.tiles = simpleModelTileset;
     this.glbLoader = new GLBTileLoader();
 
-    // Setup scene
-    this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x1a1a2e);
-    this.scene.fog = new THREE.Fog(0x1a1a2e, 15, 40);
-
-    // Setup camera
-    this.camera = new THREE.PerspectiveCamera(
-      60,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      1000
-    );
-    this.camera.position.set(15, 12, 15);
-    this.camera.lookAt(0, 0, 0);
-
-    // Setup renderer
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    document.body.appendChild(this.renderer.domElement);
-
-    // Setup controls
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.enableDamping = true;
-    this.controls.dampingFactor = 0.05;
-    this.controls.maxPolarAngle = Math.PI / 2;
-
-    // Add lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
-    this.scene.add(ambientLight);
-
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(20, 30, 20);
-    directionalLight.castShadow = true;
-    directionalLight.shadow.camera.left = -20;
-    directionalLight.shadow.camera.right = 20;
-    directionalLight.shadow.camera.top = 20;
-    directionalLight.shadow.camera.bottom = -20;
-    directionalLight.shadow.mapSize.width = 2048;
-    directionalLight.shadow.mapSize.height = 2048;
-    this.scene.add(directionalLight);
-
-    // Add hemisphere light for better ambient lighting
-    const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x8b4513, 0.3);
-    this.scene.add(hemiLight);
-
-    // Add ground plane
-    const groundGeometry = new THREE.PlaneGeometry(50, 50);
-    const groundMaterial = new THREE.MeshLambertMaterial({
-      color: 0x2a2a3e,
-      side: THREE.DoubleSide,
+    // Setup scene, camera, renderer, and controls
+    const sceneSetup = createScene({
+      backgroundColor: 0xff0000,
+      fogColor: 0x1a1a2e,
+      fogNear: 15,
+      fogFar: 40,
+      cameraPosition: { x: 15, y: 12, z: 15 },
+      enableShadows: true,
+      maxPolarAngle: Math.PI / 2,
     });
-    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -1;
-    ground.receiveShadow = true;
-    this.scene.add(ground);
+
+    this.scene = sceneSetup.scene;
+    this.camera = sceneSetup.camera;
+    this.renderer = sceneSetup.renderer;
+    this.controls = sceneSetup.controls;
+
+    // Add lighting
+    addLighting(this.scene, {
+      ambient: { color: 0xffffff, intensity: 0.4 },
+      directional: {
+        color: 0xffffff,
+        intensity: 0.8,
+        position: { x: 20, y: 30, z: 20 },
+        castShadow: true,
+        shadowCamera: { left: -20, right: 20, top: 20, bottom: -20 },
+        shadowMapSize: 2048,
+      },
+      hemisphere: {
+        skyColor: 0x87ceeb,
+        groundColor: 0x8b4513,
+        intensity: 0.3,
+      },
+    });
 
     // Setup UI
     this.setupUI();
 
     // Handle window resize
-    window.addEventListener("resize", () => this.onWindowResize());
+    const resizeHandler = createResizeHandler(this.camera, this.renderer);
+    window.addEventListener("resize", resizeHandler);
 
     // Start animation
+    this.animate = createAnimationLoop(
+      this.renderer,
+      this.scene,
+      this.camera,
+      this.controls
+    );
     this.animate();
-
-    // Show loading instructions
-    this.showLoadingInstructions();
   }
 
   private setupUI(): void {
     // Create UI container
     const uiContainer = document.createElement("div");
-    uiContainer.style.position = "absolute";
-    uiContainer.style.top = "10px";
-    uiContainer.style.left = "10px";
-    uiContainer.style.padding = "15px";
-    uiContainer.style.backgroundColor = "rgba(26, 26, 46, 0.9)";
-    uiContainer.style.color = "white";
-    uiContainer.style.fontFamily = "monospace";
-    uiContainer.style.borderRadius = "5px";
-    uiContainer.style.zIndex = "1000";
-    uiContainer.style.minWidth = "250px";
+    uiContainer.className = "ui-container";
     document.body.appendChild(uiContainer);
 
     // Title
     const title = document.createElement("h2");
+    title.className = "ui-title";
     title.textContent = "3D Model WFC Demo";
-    title.style.margin = "0 0 10px 0";
-    title.style.fontSize = "18px";
     uiContainer.appendChild(title);
 
     // Info
     const info = document.createElement("div");
+    info.className = "grid-info";
     info.textContent = `Grid: ${this.width}×${this.height}×${this.depth}`;
-    info.style.marginBottom = "10px";
-    info.style.fontSize = "12px";
     uiContainer.appendChild(info);
+
+    // Grid size controls
+    const gridControlsTitle = document.createElement("div");
+    gridControlsTitle.className = "section-title";
+    gridControlsTitle.textContent = "Grid Size";
+    uiContainer.appendChild(gridControlsTitle);
+
+    // Width slider
+    const widthContainer = this.createSlider(
+      "Width",
+      this.width,
+      5,
+      30,
+      (value) => {
+        this.width = value;
+        info.textContent = `Grid: ${this.width}×${this.height}×${this.depth}`;
+        this.updateRendererOffset();
+      }
+    );
+    uiContainer.appendChild(widthContainer);
+
+    // Height slider
+    const heightContainer = this.createSlider(
+      "Height",
+      this.height,
+      3,
+      20,
+      (value) => {
+        this.height = value;
+        info.textContent = `Grid: ${this.width}×${this.height}×${this.depth}`;
+        this.updateRendererOffset();
+      }
+    );
+    uiContainer.appendChild(heightContainer);
+
+    // Depth slider
+    const depthContainer = this.createSlider(
+      "Depth",
+      this.depth,
+      5,
+      30,
+      (value) => {
+        this.depth = value;
+        info.textContent = `Grid: ${this.width}×${this.height}×${this.depth}`;
+        this.updateRendererOffset();
+      }
+    );
+    uiContainer.appendChild(depthContainer);
+
+    // Separator
+    const separator = document.createElement("hr");
+    uiContainer.appendChild(separator);
 
     // Seed input
     const seedContainer = document.createElement("div");
-    seedContainer.style.marginBottom = "10px";
+    seedContainer.className = "seed-container";
 
     const seedLabel = document.createElement("label");
+    seedLabel.className = "seed-label";
     seedLabel.textContent = "Seed: ";
-    seedLabel.style.fontSize = "12px";
     seedContainer.appendChild(seedLabel);
 
     const seedInput = document.createElement("input");
+    seedInput.className = "seed-input";
     seedInput.type = "number";
     seedInput.value = this.currentSeed.toString();
-    seedInput.style.width = "120px";
-    seedInput.style.padding = "5px";
     seedInput.addEventListener("change", () => {
       this.currentSeed = parseInt(seedInput.value) || Date.now();
     });
@@ -173,25 +204,12 @@ class ModelDemo {
     // Generate button
     const generateBtn = document.createElement("button");
     generateBtn.textContent = "Generate";
-    generateBtn.style.padding = "10px 20px";
-    generateBtn.style.marginRight = "5px";
-    generateBtn.style.cursor = "pointer";
-    generateBtn.style.backgroundColor = "#4a5568";
-    generateBtn.style.color = "white";
-    generateBtn.style.border = "none";
-    generateBtn.style.borderRadius = "3px";
     generateBtn.addEventListener("click", () => this.generate());
     uiContainer.appendChild(generateBtn);
 
     // Random seed button
     const randomBtn = document.createElement("button");
     randomBtn.textContent = "Random";
-    randomBtn.style.padding = "10px 20px";
-    randomBtn.style.cursor = "pointer";
-    randomBtn.style.backgroundColor = "#4a5568";
-    randomBtn.style.color = "white";
-    randomBtn.style.border = "none";
-    randomBtn.style.borderRadius = "3px";
     randomBtn.addEventListener("click", () => {
       this.currentSeed = Date.now();
       seedInput.value = this.currentSeed.toString();
@@ -200,106 +218,90 @@ class ModelDemo {
 
     // Status display
     const statusContainer = document.createElement("div");
-    statusContainer.style.marginTop = "15px";
-    statusContainer.style.padding = "10px";
-    statusContainer.style.backgroundColor = "rgba(0, 0, 0, 0.3)";
-    statusContainer.style.borderRadius = "3px";
-    statusContainer.style.fontSize = "11px";
-    statusContainer.style.display = "none";
+    statusContainer.className = "status-container";
 
     const statusText = document.createElement("div");
     statusText.textContent = "Status: Ready";
     statusContainer.appendChild(statusText);
 
     const progressBar = document.createElement("div");
-    progressBar.style.width = "100%";
-    progressBar.style.height = "20px";
-    progressBar.style.backgroundColor = "#2a2a3e";
-    progressBar.style.borderRadius = "3px";
-    progressBar.style.overflow = "hidden";
-    progressBar.style.marginTop = "5px";
+    progressBar.className = "progress-bar";
 
     const progressFill = document.createElement("div");
-    progressFill.style.width = "0%";
-    progressFill.style.height = "100%";
-    progressFill.style.backgroundColor = "#4ade80";
-    progressFill.style.transition = "width 0.3s";
+    progressFill.className = "progress-fill";
     progressBar.appendChild(progressFill);
 
     statusContainer.appendChild(progressBar);
     uiContainer.appendChild(statusContainer);
 
     // Store references
-    (this as any).statusContainer = statusContainer;
-    (this as any).statusText = statusText;
-    (this as any).progressFill = progressFill;
-    (this as any).generateBtn = generateBtn;
-    (this as any).randomBtn = randomBtn;
+    this.statusContainer = statusContainer;
+    this.statusText = statusText;
+    this.progressFill = progressFill;
+    this.generateBtn = generateBtn;
+    this.randomBtn = randomBtn;
   }
 
-  private showLoadingInstructions(): void {
-    const instructions = document.createElement("div");
-    instructions.style.position = "absolute";
-    instructions.style.top = "50%";
-    instructions.style.left = "50%";
-    instructions.style.transform = "translate(-50%, -50%)";
-    instructions.style.padding = "30px";
-    instructions.style.backgroundColor = "rgba(26, 26, 46, 0.95)";
-    instructions.style.color = "white";
-    instructions.style.fontFamily = "monospace";
-    instructions.style.borderRadius = "10px";
-    instructions.style.maxWidth = "500px";
-    instructions.style.zIndex = "2000";
-    instructions.style.textAlign = "center";
+  private createSlider(
+    label: string,
+    value: number,
+    min: number,
+    max: number,
+    onChange: (value: number) => void
+  ): HTMLDivElement {
+    const container = document.createElement("div");
+    container.className = "slider-container";
 
-    instructions.innerHTML = `
-      <h2 style="margin-top: 0; color: #4ade80;">Model-Based WFC Demo</h2>
-      <p style="font-size: 14px; line-height: 1.6;">
-        This demo uses 3D models (GLB files) instead of voxels.<br><br>
-        <strong>Note:</strong> You need to provide GLB model files in the <code>/public/models/</code> directory.
-        The tileset references these files.<br><br>
-        Place the following models:<br>
-        • block.glb<br>
-        • base.glb<br>
-        • empty.glb (optional placeholder)<br><br>
-        You can find free models at:<br>
-        <a href="https://kenney.nl/assets" target="_blank" style="color: #4ade80;">Kenney.nl</a> | 
-        <a href="https://quaternius.com/" target="_blank" style="color: #4ade80;">Quaternius</a> | 
-        <a href="https://poly.pizza/" target="_blank" style="color: #4ade80;">Poly Pizza</a>
-      </p>
-      <button id="closeInstructions" style="
-        padding: 10px 30px;
-        margin-top: 15px;
-        cursor: pointer;
-        background-color: #4ade80;
-        color: #1a1a2e;
-        border: none;
-        border-radius: 5px;
-        font-weight: bold;
-        font-size: 14px;
-      ">Got it!</button>
-    `;
+    const labelRow = document.createElement("div");
+    labelRow.className = "slider-label-row";
 
-    document.body.appendChild(instructions);
+    const labelEl = document.createElement("label");
+    labelEl.textContent = label;
+    labelRow.appendChild(labelEl);
 
-    document
-      .getElementById("closeInstructions")
-      ?.addEventListener("click", () => {
-        instructions.remove();
-      });
+    const valueEl = document.createElement("span");
+    valueEl.className = "slider-value";
+    valueEl.textContent = value.toString();
+    labelRow.appendChild(valueEl);
+
+    container.appendChild(labelRow);
+
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.min = min.toString();
+    slider.max = max.toString();
+    slider.value = value.toString();
+    slider.addEventListener("input", () => {
+      const newValue = parseInt(slider.value);
+      valueEl.textContent = newValue.toString();
+      onChange(newValue);
+    });
+
+    container.appendChild(slider);
+    return container;
+  }
+
+  private updateRendererOffset(): void {
+    if (this.modelRenderer) {
+      this.modelRenderer.setOffset(
+        (-this.width * this.cellSize) / 2,
+        (-this.height * this.cellSize) / 2,
+        (-this.depth * this.cellSize) / 2
+      );
+    }
   }
 
   private async generate(): Promise<void> {
     if (this.isLoading) return;
 
-    const statusContainer = (this as any).statusContainer as HTMLDivElement;
-    const statusText = (this as any).statusText as HTMLDivElement;
-    const progressFill = (this as any).progressFill as HTMLDivElement;
-    const generateBtn = (this as any).generateBtn as HTMLButtonElement;
-    const randomBtn = (this as any).randomBtn as HTMLButtonElement;
+    const statusContainer = this.statusContainer;
+    const statusText = this.statusText;
+    const progressFill = this.progressFill;
+    const generateBtn = this.generateBtn;
+    const randomBtn = this.randomBtn;
 
     this.isLoading = true;
-    statusContainer.style.display = "block";
+    statusContainer.classList.add("visible");
     statusText.textContent = "Loading models...";
     progressFill.style.width = "0%";
     generateBtn.disabled = true;
@@ -389,7 +391,7 @@ class ModelDemo {
       progressFill.style.width = "100%";
 
       setTimeout(() => {
-        statusContainer.style.display = "none";
+        statusContainer.classList.remove("visible");
       }, 2000);
     } catch (error) {
       console.error("Generation error:", error);
@@ -408,18 +410,6 @@ class ModelDemo {
       randomBtn.disabled = false;
     }
   }
-
-  private onWindowResize(): void {
-    this.camera.aspect = window.innerWidth / window.innerHeight;
-    this.camera.updateProjectionMatrix();
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-  }
-
-  private animate = (): void => {
-    requestAnimationFrame(this.animate);
-    this.controls.update();
-    this.renderer.render(this.scene, this.camera);
-  };
 }
 
 // Initialize demo
