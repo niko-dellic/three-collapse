@@ -280,6 +280,61 @@ The loader will automatically extract the first mesh's geometry and material for
 - There's no performance difference between GLB models and geometry functions after initial loading
 - Keep geometry complexity reasonable for performance (aim for <1000 triangles per tile)
 
+## Validating Tile Adjacency
+
+**Important:** The library provides a validation function to ensure all adjacency rules reference tiles that actually exist in your tileset.
+
+### `validateTileAdjacency(tiles)`
+
+This function automatically filters out invalid tile ID references from adjacency rules. If you remove a tile from your tileset but forget to update other tiles' adjacency rules, this function will catch and fix those references.
+
+```typescript
+import { validateTileAdjacency } from "three-collapse";
+
+const rawTiles = [
+  {
+    id: "cube",
+    model: () => createBoxTile(0xff0000),
+    adjacency: {
+      up: ["cube", "sphere", "removed_tile"], // "removed_tile" doesn't exist!
+      down: ["cube"],
+    },
+  },
+  {
+    id: "sphere",
+    model: () => createSphereTile(0x00ff00),
+    adjacency: {
+      up: ["sphere"],
+      down: ["cube", "sphere"],
+    },
+  },
+];
+
+// Validate will filter out "removed_tile" from cube's adjacency
+const validatedTiles = validateTileAdjacency(rawTiles);
+// Console warning: Tile "cube" references non-existent tile "removed_tile" in up adjacency. Removing reference.
+
+// Now cube's up adjacency is: ["cube", "sphere"]
+```
+
+**Benefits:**
+
+- ✅ Catches configuration errors early
+- ✅ Automatically cleans up invalid references
+- ✅ Logs warnings so you know what was removed
+- ✅ Prevents WFC runtime errors from invalid adjacencies
+
+**Usage Pattern:**
+
+```typescript
+const rawTileset = [
+  // Your tile definitions...
+];
+
+// Validate before using
+export const tileset = validateTileAdjacency(rawTileset);
+```
+
 ## Working with Web Workers
 
 **Important:** Functions cannot be sent to Web Workers! When using the WFC algorithm in a worker, you must strip out the `model` property before sending tiles.

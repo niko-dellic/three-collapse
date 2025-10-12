@@ -9,6 +9,7 @@ export {
 } from "./SceneSetup";
 
 export {
+  validateTileAdjacency,
   prepareTilesForWorker,
   createAirTile,
   createBoxTile,

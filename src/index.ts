@@ -27,6 +27,7 @@ export {
   addLighting,
   createResizeHandler,
   createAnimationLoop,
+  validateTileAdjacency,
   prepareTilesForWorker,
   createAirTile,
   createBoxTile,

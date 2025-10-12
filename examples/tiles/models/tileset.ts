@@ -3,7 +3,9 @@ import { type ModelTile3DConfig } from "../../../src/wfc3d";
 import {
   createAirTile,
   createBoxTile,
+  createCylinderTile,
   createSphereTile,
+  validateTileAdjacency,
 } from "../../../src/utils";
 
 /**
@@ -112,8 +114,9 @@ export const modelTileset: ModelTile3DConfig[] = [
 
 /**
  * Simplified tileset for easier testing with fewer constraints
+ * Note: This tileset is validated to ensure all adjacency references exist
  */
-export const simpleModelTileset: ModelTile3DConfig[] = [
+const simpleModelTilesetRaw: ModelTile3DConfig[] = [
   {
     id: "block",
     weight: 2,
@@ -155,31 +158,30 @@ export const simpleModelTileset: ModelTile3DConfig[] = [
   },
 ];
 
+// Validate and export the tileset (removes invalid adjacency references)
+export const simpleModelTileset = validateTileAdjacency(simpleModelTilesetRaw);
+
 /**
  * Mixed tileset demonstrating both GLB models and procedural geometry
  * This example shows how you can combine imported models with Three.js geometry
  */
-export const mixedModelTileset: ModelTile3DConfig[] = [
-  {
-    id: "block",
-    weight: 2,
-    model: "/models/block.glb", // Load from GLB file
-    adjacency: {
-      up: ["block", "air", "sphere"],
-      down: ["block", "base", "cube"],
-      north: ["block", "air", "sphere", "cube"],
-      south: ["block", "air", "sphere", "cube"],
-      east: ["block", "air", "sphere", "cube"],
-      west: ["block", "air", "sphere", "cube"],
-    },
-  },
+
+const silverMaterial = new THREE.MeshMatcapMaterial({
+  matcap: new THREE.TextureLoader().load("./image/silver.png"),
+});
+
+const purpleMaterial = new THREE.MeshStandardMaterial({
+  color: 0x800080, // Purple
+});
+
+const mixedModelTilesetRaw: ModelTile3DConfig[] = [
   {
     id: "base",
-    weight: 3,
-    model: "/models/base.glb", // Load from GLB file
+    weight: 2,
+    model: () => createBoxTile(purpleMaterial),
     adjacency: {
       up: ["block", "base", "cube", "sphere"],
-      down: ["base", "cube"],
+      down: ["base", "cube", "cylinder"],
       north: ["base", "air"],
       south: ["base", "air"],
       east: ["base", "air"],
@@ -188,12 +190,12 @@ export const mixedModelTileset: ModelTile3DConfig[] = [
   },
   {
     id: "cube",
-    weight: 2,
+    weight: 1,
     // Use helper function for simple box tile
-    model: () => createBoxTile(0x4a90e2),
+    model: () => createBoxTile(silverMaterial, 1.25),
     adjacency: {
       up: ["cube", "sphere", "air"],
-      down: ["cube", "base"],
+      down: ["cube", "base", "cylinder"],
       north: ["cube", "sphere", "air", "block"],
       south: ["cube", "sphere", "air", "block"],
       east: ["cube", "sphere", "air", "block"],
@@ -201,17 +203,33 @@ export const mixedModelTileset: ModelTile3DConfig[] = [
     },
   },
   {
+    id: "cylinder",
+    weight: 5,
+    model: () => createCylinderTile(purpleMaterial),
+    adjacency: {
+      up: ["cylinder", "cube", "air", "sphere", "cylinder"],
+      down: ["cylinder", "cube", "base", "block"],
+      north: ["cylinder", "cube", "air", "block"],
+      south: ["cylinder", "cube", "air", "block", "cylinder"],
+      east: ["cylinder", "cube", "air", "block", "cylinder"],
+      west: ["cylinder", "cube", "air", "block", "cylinder"],
+    },
+  },
+  {
     id: "sphere",
     weight: 1,
     // Use helper function for simple sphere tile
-    model: () => createSphereTile(0xe24a4a),
+    model: () =>
+      createSphereTile(
+        new THREE.MeshStandardMaterial({ metalness: 1, roughness: 0.66 })
+      ),
     adjacency: {
-      up: ["sphere", "air"],
-      down: ["block", "cube", "base"],
-      north: ["sphere", "air", "cube"],
-      south: ["sphere", "air", "cube"],
+      up: ["sphere", "cube", "air"],
+      down: ["block", "cube", "base", "cylinder"],
+      north: ["sphere", "air", "cube", "cylinder"],
+      south: ["sphere", "air", "cube", "cylinder"],
       east: ["sphere", "air", "cube"],
-      west: ["sphere", "air", "cube"],
+      west: ["sphere", "air", "cube", "cylinder"],
     },
   },
   {
@@ -220,12 +238,15 @@ export const mixedModelTileset: ModelTile3DConfig[] = [
     // Use helper function for minimal air tile
     model: createAirTile,
     adjacency: {
-      up: ["air"],
-      down: ["air", "block", "base", "cube", "sphere"],
-      north: ["air", "block", "base", "cube", "sphere"],
-      south: ["air", "block", "base", "cube", "sphere"],
-      east: ["air", "block", "base", "cube", "sphere"],
-      west: ["air", "block", "base", "cube", "sphere"],
+      up: ["air", "cube"],
+      down: ["air", "block", "base", "cube", "sphere", "cylinder"],
+      north: ["air", "block", "base", "cube", "sphere", "cylinder"],
+      south: ["air", "block", "base", "cube", "sphere", "cylinder"],
+      east: ["air", "block", "base", "cube", "sphere", "cylinder"],
+      west: ["air", "block", "base", "cube", "sphere", "cylinder"],
     },
   },
 ];
+
+// Validate and export the tileset (removes invalid adjacency references)
+export const mixedModelTileset = validateTileAdjacency(mixedModelTilesetRaw);

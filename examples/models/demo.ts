@@ -39,7 +39,7 @@ export class ModelDemo {
   randomBtn: HTMLButtonElement;
 
   constructor() {
-    this.tiles = simpleModelTileset;
+    this.tiles = mixedModelTileset;
     this.glbLoader = new GLBTileLoader();
 
     // Setup scene, camera, renderer, and controls

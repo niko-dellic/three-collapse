@@ -10,6 +10,54 @@ import type {
  */
 
 /**
+ * Validates and cleans tile adjacency rules by removing references to non-existent tiles
+ * This helps catch configuration errors where tiles reference IDs that don't exist
+ *
+ * @param tiles - Array of tile configurations to validate
+ * @returns Array of tile configs with cleaned adjacency rules (only valid tile IDs)
+ */
+export function validateTileAdjacency<T extends BaseTile3DConfig>(
+  tiles: T[]
+): T[] {
+  // Get set of all valid tile IDs
+  const validIds = new Set(tiles.map((tile) => tile.id));
+
+  // Filter adjacency rules to only include valid IDs
+  return tiles.map((tile) => {
+    if (!tile.adjacency) return tile;
+
+    const cleanedAdjacency: typeof tile.adjacency = {};
+
+    // Process each direction
+    for (const [direction, ids] of Object.entries(tile.adjacency)) {
+      if (Array.isArray(ids)) {
+        // Filter out invalid IDs
+        const validIdsForDirection = ids.filter((id) => {
+          const isValid = validIds.has(id);
+          if (!isValid) {
+            console.warn(
+              `Tile "${tile.id}" references non-existent tile "${id}" in ${direction} adjacency. Removing reference.`
+            );
+          }
+          return isValid;
+        });
+
+        // Only include direction if it has valid IDs
+        if (validIdsForDirection.length > 0) {
+          cleanedAdjacency[direction as keyof typeof tile.adjacency] =
+            validIdsForDirection;
+        }
+      }
+    }
+
+    return {
+      ...tile,
+      adjacency: cleanedAdjacency,
+    };
+  });
+}
+
+/**
  * Strips out the 'model' property from tile configs for sending to Web Workers
  * Web Workers can't receive functions, so we only send the metadata (id, weight, adjacency)
  *
@@ -56,13 +104,14 @@ export function createAirTile(): THREE.Mesh {
  * @param size - Size of the box (default: 1)
  * @returns A Mesh with box geometry and colored material
  */
-export function createBoxTile(color: number, size: number = 1): THREE.Mesh {
-  const geometry = new THREE.BoxGeometry(size, size, size);
-  const material = new THREE.MeshStandardMaterial({
-    color,
+export function createBoxTile(
+  material: THREE.Material = new THREE.MeshStandardMaterial({
     roughness: 0.5,
     metalness: 0.2,
-  });
+  }),
+  size: number = 1
+): THREE.Mesh {
+  const geometry = new THREE.BoxGeometry(size, size, size);
   return new THREE.Mesh(geometry, material);
 }
 
@@ -75,16 +124,14 @@ export function createBoxTile(color: number, size: number = 1): THREE.Mesh {
  * @returns A Mesh with sphere geometry and colored material
  */
 export function createSphereTile(
-  color: number,
+  material: THREE.Material = new THREE.MeshStandardMaterial({
+    roughness: 0.3,
+    metalness: 0.5,
+  }),
   radius: number = 0.5,
   segments: number = 16
 ): THREE.Mesh {
   const geometry = new THREE.SphereGeometry(radius, segments, segments);
-  const material = new THREE.MeshStandardMaterial({
-    color,
-    roughness: 0.3,
-    metalness: 0.5,
-  });
   return new THREE.Mesh(geometry, material);
 }
 
@@ -99,9 +146,12 @@ export function createSphereTile(
  * @returns A Mesh with cylinder geometry and colored material
  */
 export function createCylinderTile(
-  color: number,
-  radiusTop: number = 0.3,
-  radiusBottom: number = 0.3,
+  material: THREE.Material = new THREE.MeshStandardMaterial({
+    roughness: 0.6,
+    metalness: 0.1,
+  }),
+  radiusTop: number = 0.33,
+  radiusBottom: number = 0.33,
   height: number = 1,
   segments: number = 16
 ): THREE.Mesh {
@@ -111,10 +161,5 @@ export function createCylinderTile(
     height,
     segments
   );
-  const material = new THREE.MeshStandardMaterial({
-    color,
-    roughness: 0.6,
-    metalness: 0.1,
-  });
   return new THREE.Mesh(geometry, material);
 }
