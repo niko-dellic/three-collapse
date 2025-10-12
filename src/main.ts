@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { voxelTileset } from "../examples/tiles/voxels/tileset";
-import type { WFCTile3DConfig } from "./wfc3d";
+import type { VoxelTile3DConfig } from "./wfc3d";
 
 // Worker types
 interface ProgressMessage {
@@ -35,12 +35,12 @@ class VoxelDemo {
   private depth = 30;
   private voxelSize = 1;
 
-  private tiles: Map<string, WFCTile3DConfig>;
+  private tiles: Map<string, VoxelTile3DConfig>;
   private currentSeed: number = Date.now();
 
   constructor() {
     // Create tile map
-    this.tiles = new Map(voxelTileset.map((t: WFCTile3DConfig) => [t.id, t]));
+    this.tiles = new Map(voxelTileset.map((t: VoxelTile3DConfig) => [t.id, t]));
 
     // Setup scene
     this.scene = new THREE.Scene();

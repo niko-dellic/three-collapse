@@ -1,10 +1,17 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from "vite";
+import { resolve } from "path";
 
 export default defineConfig({
   worker: {
-    format: 'es',
+    format: "es",
   },
   build: {
-    target: 'esnext',
+    target: "esnext",
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, "index.html"),
+        models: resolve(__dirname, "models.html"),
+      },
+    },
   },
 });
