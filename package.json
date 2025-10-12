@@ -1,0 +1,23 @@
+{
+  "name": "three-collapse",
+  "version": "1.0.0",
+  "description": "3D Wave Function Collapse implementation with Three.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "keywords": ["wfc", "three.js", "voxel", "procedural-generation"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.180.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.9"
+  }
+}
+
