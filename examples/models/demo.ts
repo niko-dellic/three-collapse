@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { simpleModelTileset } from "../tiles/models/tileset";
+import { simpleModelTileset, mixedModelTileset } from "../tiles/models/tileset";
 import { GLBTileLoader } from "../../src/loaders/GLBTileLoader";
 import { InstancedModelRenderer } from "../../src/renderers/InstancedModelRenderer";
 import type { ModelTile3DConfig } from "../../src/wfc3d";

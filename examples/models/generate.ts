@@ -1,6 +1,7 @@
 import { ModelDemo } from "./demo";
 import { InstancedModelRenderer } from "../../src/renderers/InstancedModelRenderer";
 import { ModelTile3DConfig } from "../../src/wfc3d";
+import { prepareTilesForWorker } from "../../src/utils";
 
 // Worker types
 interface ProgressMessage {
@@ -96,12 +97,13 @@ export default async function generate(
       };
 
       // Send generation request
+      // Strip out 'model' property since functions can't be cloned to worker
       modelDemo.worker.postMessage({
         type: "generate",
         width: modelDemo.width,
         height: modelDemo.height,
         depth: modelDemo.depth,
-        tiles: modelDemo.tiles,
+        tiles: prepareTilesForWorker(tiles),
         seed: modelDemo.currentSeed,
       });
     });

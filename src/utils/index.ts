@@ -7,3 +7,11 @@ export {
   type LightConfig,
   type SceneSetupResult,
 } from "./SceneSetup";
+
+export {
+  prepareTilesForWorker,
+  createAirTile,
+  createBoxTile,
+  createSphereTile,
+  createCylinderTile,
+} from "./TileHelpers";

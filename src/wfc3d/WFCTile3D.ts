@@ -1,3 +1,5 @@
+import * as THREE from "three";
+
 /**
  * Base configuration for 3D tiles in Wave Function Collapse
  * Supports 6-way adjacency (up, down, north, south, east, west)
@@ -25,10 +27,10 @@ export interface VoxelTile3DConfig extends BaseTile3DConfig {
 }
 
 /**
- * Model-based tile configuration with GLB file support
+ * Model-based tile configuration with GLB file support or custom geometry
  */
 export interface ModelTile3DConfig extends BaseTile3DConfig {
-  filepath: string; // path to GLB file
+  model: string | (() => THREE.Object3D); // path to GLB file OR function that returns a Three.js object
 }
 
 /**
@@ -62,8 +64,8 @@ export class WFCTile3D {
     }
 
     // Handle model-specific properties
-    if ("filepath" in config) {
-      this.filepath = config.filepath;
+    if ("model" in config) {
+      if (typeof config.model === "string") this.filepath = config.model;
     }
 
     // Initialize adjacency map

@@ -20,3 +20,19 @@ export { GLBTileLoader, type LoadedModelData } from "./loaders";
 
 // Renderers
 export { InstancedModelRenderer, type TileInstance } from "./renderers";
+
+// Utilities
+export {
+  createScene,
+  addLighting,
+  createResizeHandler,
+  createAnimationLoop,
+  prepareTilesForWorker,
+  createAirTile,
+  createBoxTile,
+  createSphereTile,
+  createCylinderTile,
+  type SceneConfig,
+  type LightConfig,
+  type SceneSetupResult,
+} from "./utils";

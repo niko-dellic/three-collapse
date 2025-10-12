@@ -1,4 +1,10 @@
+import * as THREE from "three";
 import { type ModelTile3DConfig } from "../../../src/wfc3d";
+import {
+  createAirTile,
+  createBoxTile,
+  createSphereTile,
+} from "../../../src/utils";
 
 /**
  * Model-based tileset using GLB files
@@ -17,7 +23,7 @@ export const modelTileset: ModelTile3DConfig[] = [
   {
     id: "floor",
     weight: 3,
-    filepath: "/models/floor.glb",
+    model: "/models/floor.glb",
     adjacency: {
       up: ["air", "wall", "corner", "floor"],
       down: ["floor", "foundation"],
@@ -32,7 +38,7 @@ export const modelTileset: ModelTile3DConfig[] = [
   {
     id: "wall",
     weight: 2,
-    filepath: "/models/wall.glb",
+    model: "/models/wall.glb",
     adjacency: {
       up: ["wall", "roof", "air"],
       down: ["wall", "floor", "foundation"],
@@ -47,7 +53,7 @@ export const modelTileset: ModelTile3DConfig[] = [
   {
     id: "corner",
     weight: 1,
-    filepath: "/models/corner.glb",
+    model: "/models/corner.glb",
     adjacency: {
       up: ["corner", "roof", "air"],
       down: ["corner", "floor", "foundation"],
@@ -62,7 +68,7 @@ export const modelTileset: ModelTile3DConfig[] = [
   {
     id: "foundation",
     weight: 2,
-    filepath: "/models/foundation.glb",
+    model: "/models/foundation.glb",
     adjacency: {
       up: ["floor", "wall", "corner"],
       down: ["foundation"],
@@ -77,7 +83,7 @@ export const modelTileset: ModelTile3DConfig[] = [
   {
     id: "roof",
     weight: 2,
-    filepath: "/models/roof.glb",
+    model: "/models/roof.glb",
     adjacency: {
       up: ["air"],
       down: ["wall", "corner"],
@@ -92,7 +98,7 @@ export const modelTileset: ModelTile3DConfig[] = [
   {
     id: "air",
     weight: 10,
-    filepath: "/models/empty.glb", // Placeholder, won't be rendered
+    model: "/models/empty.glb", // Placeholder, won't be rendered
     adjacency: {
       up: ["air", "roof"],
       down: ["air", "floor", "foundation"],
@@ -111,7 +117,7 @@ export const simpleModelTileset: ModelTile3DConfig[] = [
   {
     id: "block",
     weight: 2,
-    filepath: "/models/block.glb",
+    model: "/models/block.glb",
     adjacency: {
       up: ["block", "air"],
       down: ["block", "base"],
@@ -124,7 +130,7 @@ export const simpleModelTileset: ModelTile3DConfig[] = [
   {
     id: "base",
     weight: 3,
-    filepath: "/models/base.glb",
+    model: "/models/base.glb",
     adjacency: {
       up: ["block", "base"],
       down: ["base"],
@@ -137,7 +143,7 @@ export const simpleModelTileset: ModelTile3DConfig[] = [
   {
     id: "air",
     weight: 8,
-    filepath: "/models/empty.glb",
+    model: createAirTile, // Use helper for minimal geometry
     adjacency: {
       up: ["air"],
       down: ["air", "block", "base"],
@@ -145,6 +151,81 @@ export const simpleModelTileset: ModelTile3DConfig[] = [
       south: ["air", "block", "base"],
       east: ["air", "block", "base"],
       west: ["air", "block", "base"],
+    },
+  },
+];
+
+/**
+ * Mixed tileset demonstrating both GLB models and procedural geometry
+ * This example shows how you can combine imported models with Three.js geometry
+ */
+export const mixedModelTileset: ModelTile3DConfig[] = [
+  {
+    id: "block",
+    weight: 2,
+    model: "/models/block.glb", // Load from GLB file
+    adjacency: {
+      up: ["block", "air", "sphere"],
+      down: ["block", "base", "cube"],
+      north: ["block", "air", "sphere", "cube"],
+      south: ["block", "air", "sphere", "cube"],
+      east: ["block", "air", "sphere", "cube"],
+      west: ["block", "air", "sphere", "cube"],
+    },
+  },
+  {
+    id: "base",
+    weight: 3,
+    model: "/models/base.glb", // Load from GLB file
+    adjacency: {
+      up: ["block", "base", "cube", "sphere"],
+      down: ["base", "cube"],
+      north: ["base", "air"],
+      south: ["base", "air"],
+      east: ["base", "air"],
+      west: ["base", "air"],
+    },
+  },
+  {
+    id: "cube",
+    weight: 2,
+    // Use helper function for simple box tile
+    model: () => createBoxTile(0x4a90e2),
+    adjacency: {
+      up: ["cube", "sphere", "air"],
+      down: ["cube", "base"],
+      north: ["cube", "sphere", "air", "block"],
+      south: ["cube", "sphere", "air", "block"],
+      east: ["cube", "sphere", "air", "block"],
+      west: ["cube", "sphere", "air", "block"],
+    },
+  },
+  {
+    id: "sphere",
+    weight: 1,
+    // Use helper function for simple sphere tile
+    model: () => createSphereTile(0xe24a4a),
+    adjacency: {
+      up: ["sphere", "air"],
+      down: ["block", "cube", "base"],
+      north: ["sphere", "air", "cube"],
+      south: ["sphere", "air", "cube"],
+      east: ["sphere", "air", "cube"],
+      west: ["sphere", "air", "cube"],
+    },
+  },
+  {
+    id: "air",
+    weight: 8,
+    // Use helper function for minimal air tile
+    model: createAirTile,
+    adjacency: {
+      up: ["air"],
+      down: ["air", "block", "base", "cube", "sphere"],
+      north: ["air", "block", "base", "cube", "sphere"],
+      south: ["air", "block", "base", "cube", "sphere"],
+      east: ["air", "block", "base", "cube", "sphere"],
+      west: ["air", "block", "base", "cube", "sphere"],
     },
   },
 ];

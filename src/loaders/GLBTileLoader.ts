@@ -89,7 +89,50 @@ export class GLBTileLoader {
   }
 
   /**
+   * Create model data from a geometry function
+   */
+  createModelDataFromGeometry(
+    geometryFn: () => THREE.Object3D
+  ): LoadedModelData {
+    const object = geometryFn();
+
+    // Extract geometry and material from the object
+    let extractedGeometry: THREE.BufferGeometry | null = null;
+    let extractedMaterial: THREE.Material | THREE.Material[] | null = null;
+
+    if (object instanceof THREE.Mesh) {
+      extractedGeometry = object.geometry;
+      extractedMaterial = object.material;
+    } else {
+      // Traverse to find the first mesh
+      object.traverse((child) => {
+        if (child instanceof THREE.Mesh && extractedGeometry === null) {
+          extractedGeometry = child.geometry;
+          extractedMaterial = child.material;
+        }
+      });
+    }
+
+    if (extractedGeometry === null || extractedMaterial === null) {
+      throw new Error("No mesh found in geometry function result");
+    }
+
+    // Calculate bounding box
+    extractedGeometry.computeBoundingBox();
+    const boundingBox = extractedGeometry.boundingBox || new THREE.Box3();
+
+    return {
+      geometry: extractedGeometry.clone(),
+      material: Array.isArray(extractedMaterial)
+        ? extractedMaterial.map((m: THREE.Material) => m.clone())
+        : extractedMaterial.clone(),
+      boundingBox: boundingBox.clone(),
+    };
+  }
+
+  /**
    * Load all models from a tileset configuration
+   * Supports both GLB file paths (string) and geometry functions
    */
   async loadTileset(
     tileConfigs: ModelTile3DConfig[]
@@ -98,10 +141,25 @@ export class GLBTileLoader {
     const loadPromises: Promise<void>[] = [];
 
     for (const config of tileConfigs) {
-      const promise = this.loadModel(config.filepath).then((modelData) => {
-        modelMap.set(config.id, modelData);
-      });
-      loadPromises.push(promise);
+      if (typeof config.model === "string") {
+        // Load from GLB file
+        const promise = this.loadModel(config.model).then((modelData) => {
+          modelMap.set(config.id, modelData);
+        });
+        loadPromises.push(promise);
+      } else if (typeof config.model === "function") {
+        // Create from geometry function
+        try {
+          const modelData = this.createModelDataFromGeometry(config.model);
+          modelMap.set(config.id, modelData);
+        } catch (error) {
+          console.error(
+            `Failed to create geometry for tile ${config.id}:`,
+            error
+          );
+          throw error;
+        }
+      }
     }
 
     await Promise.all(loadPromises);
