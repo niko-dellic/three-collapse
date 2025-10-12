@@ -10,51 +10,33 @@ import {
   createResizeHandler,
   createAnimationLoop,
 } from "../../src/utils/SceneSetup";
+import generate from "./generate";
 
-// Worker types
-interface ProgressMessage {
-  type: "progress";
-  progress: number;
-}
+export class ModelDemo {
+  scene: THREE.Scene;
+  camera: THREE.PerspectiveCamera;
+  renderer: THREE.WebGLRenderer;
+  controls: OrbitControls;
+  worker: Worker | null = null;
 
-interface CompleteMessage {
-  type: "complete";
-  success: boolean;
-  data?: string[][][];
-}
+  glbLoader: GLBTileLoader;
+  modelRenderer: InstancedModelRenderer | null = null;
 
-interface ErrorMessage {
-  type: "error";
-  message: string;
-}
+  width = 10;
+  height = 8;
+  depth = 10;
+  cellSize = 1;
 
-type WorkerResponse = ProgressMessage | CompleteMessage | ErrorMessage;
+  tiles: ModelTile3DConfig[];
+  currentSeed: number = Date.now();
+  isLoading: boolean = false;
+  animate: () => void;
 
-class ModelDemo {
-  private scene: THREE.Scene;
-  private camera: THREE.PerspectiveCamera;
-  private renderer: THREE.WebGLRenderer;
-  private controls: OrbitControls;
-  private worker: Worker | null = null;
-
-  private glbLoader: GLBTileLoader;
-  private modelRenderer: InstancedModelRenderer | null = null;
-
-  private width = 10;
-  private height = 8;
-  private depth = 10;
-  private cellSize = 1;
-
-  private tiles: ModelTile3DConfig[];
-  private currentSeed: number = Date.now();
-  private isLoading: boolean = false;
-  private animate: () => void;
-
-  private statusContainer: HTMLDivElement;
-  private statusText: HTMLDivElement;
-  private progressFill: HTMLDivElement;
-  private generateBtn: HTMLButtonElement;
-  private randomBtn: HTMLButtonElement;
+  statusContainer: HTMLDivElement;
+  statusText: HTMLDivElement;
+  progressFill: HTMLDivElement;
+  generateBtn: HTMLButtonElement;
+  randomBtn: HTMLButtonElement;
 
   constructor() {
     this.tiles = simpleModelTileset;
@@ -292,123 +274,7 @@ class ModelDemo {
   }
 
   private async generate(): Promise<void> {
-    if (this.isLoading) return;
-
-    const statusContainer = this.statusContainer;
-    const statusText = this.statusText;
-    const progressFill = this.progressFill;
-    const generateBtn = this.generateBtn;
-    const randomBtn = this.randomBtn;
-
-    this.isLoading = true;
-    statusContainer.classList.add("visible");
-    statusText.textContent = "Loading models...";
-    progressFill.style.width = "0%";
-    generateBtn.disabled = true;
-    randomBtn.disabled = true;
-
-    try {
-      // Load models
-      statusText.textContent = "Loading GLB models...";
-      const modelData = await this.glbLoader.loadTileset(this.tiles);
-      progressFill.style.width = "30%";
-
-      // Clear existing renderer
-      if (this.modelRenderer) {
-        this.modelRenderer.dispose();
-      }
-
-      // Create new renderer with loaded models
-      this.modelRenderer = new InstancedModelRenderer(
-        this.scene,
-        modelData,
-        this.cellSize
-      );
-
-      // Set offset to center the grid
-      this.modelRenderer.setOffset(
-        (-this.width * this.cellSize) / 2,
-        (-this.height * this.cellSize) / 2,
-        (-this.depth * this.cellSize) / 2
-      );
-
-      // Create worker if not exists
-      if (!this.worker) {
-        this.worker = new Worker(
-          new URL("../../src/wfc.worker.ts", import.meta.url),
-          { type: "module" }
-        );
-      }
-
-      // Run WFC algorithm
-      statusText.textContent = "Running WFC algorithm...";
-      const result = await new Promise<string[][][]>((resolve, reject) => {
-        if (!this.worker) return reject(new Error("Worker not initialized"));
-
-        this.worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
-          const message = e.data;
-
-          if (message.type === "progress") {
-            const progress = 30 + message.progress * 60; // 30-90%
-            progressFill.style.width = `${progress}%`;
-          } else if (message.type === "complete") {
-            if (message.success && message.data) {
-              resolve(message.data);
-            } else {
-              reject(new Error("Generation failed - contradiction occurred"));
-            }
-          } else if (message.type === "error") {
-            reject(new Error(message.message));
-          }
-        };
-
-        // Send generation request
-        this.worker.postMessage({
-          type: "generate",
-          width: this.width,
-          height: this.height,
-          depth: this.depth,
-          tiles: this.tiles,
-          seed: this.currentSeed,
-        });
-      });
-
-      // Render using instanced meshes
-      statusText.textContent = "Rendering instances...";
-      progressFill.style.width = "95%";
-
-      // Filter out 'air' tiles before rendering
-      const filteredGrid = result.map((xLayer) =>
-        xLayer.map((yLayer) =>
-          yLayer.map((tileId) => (tileId === "air" ? "" : tileId))
-        )
-      );
-
-      this.modelRenderer.render(filteredGrid);
-
-      const stats = this.modelRenderer.getStats();
-      statusText.textContent = `Complete! ${stats.totalInstances} instances, ${stats.tileTypes} types`;
-      progressFill.style.width = "100%";
-
-      setTimeout(() => {
-        statusContainer.classList.remove("visible");
-      }, 2000);
-    } catch (error) {
-      console.error("Generation error:", error);
-      statusText.textContent = `Error: ${
-        error instanceof Error ? error.message : "Unknown error"
-      }`;
-      progressFill.style.width = "0%";
-      progressFill.style.backgroundColor = "#ef4444";
-
-      setTimeout(() => {
-        progressFill.style.backgroundColor = "#4ade80";
-      }, 3000);
-    } finally {
-      this.isLoading = false;
-      generateBtn.disabled = false;
-      randomBtn.disabled = false;
-    }
+    await generate(this, this.tiles);
   }
 }
 
