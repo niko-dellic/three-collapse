@@ -97,6 +97,19 @@ export function createAirTile(): THREE.Mesh {
   return new THREE.Mesh(geometry, material);
 }
 
+export function createPlaneTile(
+  material: THREE.Material = new THREE.MeshStandardMaterial({
+    roughness: 0.5,
+    metalness: 0.2,
+    side: THREE.DoubleSide,
+  }),
+  size: number = 1
+): THREE.Mesh {
+  const geometry = new THREE.PlaneGeometry(size, size);
+  geometry.rotateX(-Math.PI / 2);
+  return new THREE.Mesh(geometry, material);
+}
+
 /**
  * Creates a simple colored box tile
  *

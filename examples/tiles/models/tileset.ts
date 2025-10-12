@@ -7,6 +7,7 @@ import {
   createSphereTile,
   validateTileAdjacency,
 } from "../../../src/utils";
+import { createPlaneTile } from "../../../src/utils/TileHelpers";
 
 /**
  * Model-based tileset using GLB files
@@ -168,20 +169,22 @@ export const simpleModelTileset = validateTileAdjacency(simpleModelTilesetRaw);
 
 const silverMaterial = new THREE.MeshMatcapMaterial({
   matcap: new THREE.TextureLoader().load("./image/silver.png"),
+  side: THREE.DoubleSide,
 });
 
 const purpleMaterial = new THREE.MeshStandardMaterial({
   color: 0x800080, // Purple
+  side: THREE.DoubleSide,
 });
 
 const mixedModelTilesetRaw: ModelTile3DConfig[] = [
   {
     id: "base",
-    weight: 2,
-    model: () => createBoxTile(purpleMaterial),
+    weight: 7,
+    model: () => createPlaneTile(purpleMaterial),
     adjacency: {
-      up: ["block", "base", "cube", "sphere"],
-      down: ["base", "cube", "cylinder"],
+      up: ["air"],
+      down: ["cube", "cylinder", "base"],
       north: ["base", "air"],
       south: ["base", "air"],
       east: ["base", "air"],
@@ -205,7 +208,7 @@ const mixedModelTilesetRaw: ModelTile3DConfig[] = [
   {
     id: "cylinder",
     weight: 5,
-    model: () => createCylinderTile(purpleMaterial),
+    model: () => createCylinderTile(silverMaterial),
     adjacency: {
       up: ["cylinder", "cube", "air", "sphere", "cylinder"],
       down: ["cylinder", "cube", "base", "block"],
