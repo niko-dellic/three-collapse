@@ -1,4 +1,4 @@
-import { WFCTile3D } from './WFCTile3D';
+import { WFCTile3D } from "./WFCTile3D";
 
 /**
  * Cell in the 3D grid that tracks possible tile states
@@ -28,12 +28,12 @@ class Cell {
 
   constrain(allowedTiles: Set<string>): boolean {
     if (this.collapsed) return false;
-    
+
     const before = this.possibleTiles.size;
     this.possibleTiles = new Set(
-      [...this.possibleTiles].filter(t => allowedTiles.has(t))
+      [...this.possibleTiles].filter((t) => allowedTiles.has(t))
     );
-    
+
     return this.possibleTiles.size < before;
   }
 }
@@ -48,16 +48,21 @@ export class WFC3DBuffer {
   cells: Cell[][][];
   tiles: Map<string, WFCTile3D>;
 
-  constructor(width: number, height: number, depth: number, tiles: WFCTile3D[]) {
+  constructor(
+    width: number,
+    height: number,
+    depth: number,
+    tiles: WFCTile3D[]
+  ) {
     this.width = width;
     this.height = height;
     this.depth = depth;
-    this.tiles = new Map(tiles.map(t => [t.id, t]));
+    this.tiles = new Map(tiles.map((t) => [t.id, t]));
 
     // Initialize all cells with all possible tiles
-    const tileIds = tiles.map(t => t.id);
+    const tileIds = tiles.map((t) => t.id);
     this.cells = [];
-    
+
     for (let x = 0; x < width; x++) {
       this.cells[x] = [];
       for (let y = 0; y < height; y++) {
@@ -73,7 +78,14 @@ export class WFC3DBuffer {
    * Get cell at position
    */
   getCell(x: number, y: number, z: number): Cell | null {
-    if (x < 0 || x >= this.width || y < 0 || y >= this.height || z < 0 || z >= this.depth) {
+    if (
+      x < 0 ||
+      x >= this.width ||
+      y < 0 ||
+      y >= this.height ||
+      z < 0 ||
+      z >= this.depth
+    ) {
       return null;
     }
     return this.cells[x][y][z];
@@ -104,7 +116,12 @@ export class WFC3DBuffer {
   /**
    * Get neighbor coordinates in a specific direction
    */
-  getNeighborCoords(x: number, y: number, z: number, direction: number): [number, number, number] | null {
+  getNeighborCoords(
+    x: number,
+    y: number,
+    z: number,
+    direction: number
+  ): [number, number, number] | null {
     switch (direction) {
       case WFCTile3D.UP:
         return [x, y + 1, z];
@@ -163,4 +180,124 @@ export class WFC3DBuffer {
     const cell = this.getCell(x, y, z);
     return cell?.tileId ?? null;
   }
+
+  /**
+   * Expand the buffer in specified directions
+   * Returns a new buffer with expanded dimensions and existing cells copied
+   */
+  expand(expansions: {
+    xMin: number;
+    xMax: number;
+    yMin: number;
+    yMax: number;
+    zMin: number;
+    zMax: number;
+  }): WFC3DBuffer {
+    const newWidth = this.width + expansions.xMin + expansions.xMax;
+    const newHeight = this.height + expansions.yMin + expansions.yMax;
+    const newDepth = this.depth + expansions.zMin + expansions.zMax;
+
+    // Create new buffer
+    const tiles = Array.from(this.tiles.values());
+    const newBuffer = new WFC3DBuffer(newWidth, newHeight, newDepth, tiles);
+
+    // Copy existing collapsed cells to their new positions
+    for (let x = 0; x < this.width; x++) {
+      for (let y = 0; y < this.height; y++) {
+        for (let z = 0; z < this.depth; z++) {
+          const oldCell = this.cells[x][y][z];
+          const newX = x + expansions.xMin;
+          const newY = y + expansions.yMin;
+          const newZ = z + expansions.zMin;
+          const newCell = newBuffer.cells[newX][newY][newZ];
+
+          if (oldCell.collapsed && oldCell.tileId) {
+            newCell.collapse(oldCell.tileId);
+          } else {
+            // Copy possible tiles for uncollapsed cells
+            newCell.possibleTiles = new Set(oldCell.possibleTiles);
+          }
+        }
+      }
+    }
+
+    return newBuffer;
+  }
+
+  /**
+   * Serialize buffer to transferable object for worker communication
+   */
+  serialize(): SerializedBuffer {
+    const cellData: SerializedCell[] = [];
+
+    for (let x = 0; x < this.width; x++) {
+      for (let y = 0; y < this.height; y++) {
+        for (let z = 0; z < this.depth; z++) {
+          const cell = this.cells[x][y][z];
+          cellData.push({
+            x,
+            y,
+            z,
+            collapsed: cell.collapsed,
+            tileId: cell.tileId,
+            possibleTiles: Array.from(cell.possibleTiles),
+          });
+        }
+      }
+    }
+
+    return {
+      width: this.width,
+      height: this.height,
+      depth: this.depth,
+      cellData,
+    };
+  }
+
+  /**
+   * Deserialize buffer from worker message
+   */
+  static deserialize(
+    serialized: SerializedBuffer,
+    tiles: WFCTile3D[]
+  ): WFC3DBuffer {
+    const buffer = new WFC3DBuffer(
+      serialized.width,
+      serialized.height,
+      serialized.depth,
+      tiles
+    );
+
+    // Restore cell states
+    for (const cellData of serialized.cellData) {
+      const cell = buffer.cells[cellData.x][cellData.y][cellData.z];
+      cell.collapsed = cellData.collapsed;
+      cell.tileId = cellData.tileId;
+      cell.possibleTiles = new Set(cellData.possibleTiles);
+    }
+
+    return buffer;
+  }
+}
+
+/**
+ * Serialized cell data for worker transfer
+ */
+export interface SerializedCell {
+  x: number;
+  y: number;
+  z: number;
+  collapsed: boolean;
+  tileId: string | null;
+  possibleTiles: string[];
+}
+
+/**
+ * Serialized buffer for worker transfer
+ */
+export interface SerializedBuffer {
+  width: number;
+  height: number;
+  depth: number;
+  cellData: SerializedCell[];
 }

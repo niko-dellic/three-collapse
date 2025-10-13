@@ -161,4 +161,22 @@ export class InstancedModelRenderer {
   dispose(): void {
     this.clear();
   }
+
+  /**
+   * Update the renderer with a new grid, preserving existing instances where possible
+   */
+  updateGrid(collapsedGrid: string[][][]): void {
+    // For now, use simple re-render approach
+    // Future optimization: track changes and update only modified instances
+    this.render(collapsedGrid);
+  }
+
+  /**
+   * Get the current rendered grid
+   */
+  getCurrentGrid(): string[][][] | null {
+    // Would need to track the grid during render() to implement this
+    // For now, return null to indicate we need a full re-render
+    return null;
+  }
 }

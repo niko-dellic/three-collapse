@@ -72,22 +72,25 @@ export class WFCTile3D {
     this.adjacency = new Map();
 
     if (config.adjacency) {
-      if (config.adjacency.up) {
+      // Set adjacency for each direction if provided
+      // - Omitting a direction = no restrictions (all tiles allowed)
+      // - Empty array [] = strict restriction (no tiles allowed)
+      if (config.adjacency.up !== undefined) {
         this.adjacency.set(WFCTile3D.UP, new Set(config.adjacency.up));
       }
-      if (config.adjacency.down) {
+      if (config.adjacency.down !== undefined) {
         this.adjacency.set(WFCTile3D.DOWN, new Set(config.adjacency.down));
       }
-      if (config.adjacency.north) {
+      if (config.adjacency.north !== undefined) {
         this.adjacency.set(WFCTile3D.NORTH, new Set(config.adjacency.north));
       }
-      if (config.adjacency.south) {
+      if (config.adjacency.south !== undefined) {
         this.adjacency.set(WFCTile3D.SOUTH, new Set(config.adjacency.south));
       }
-      if (config.adjacency.east) {
+      if (config.adjacency.east !== undefined) {
         this.adjacency.set(WFCTile3D.EAST, new Set(config.adjacency.east));
       }
-      if (config.adjacency.west) {
+      if (config.adjacency.west !== undefined) {
         this.adjacency.set(WFCTile3D.WEST, new Set(config.adjacency.west));
       }
     }

@@ -172,19 +172,21 @@ const silverMaterial = new THREE.MeshMatcapMaterial({
   side: THREE.DoubleSide,
 });
 
-const purpleMaterial = new THREE.MeshStandardMaterial({
-  color: 0x800080, // Purple
+const purpleMaterial = new THREE.MeshBasicMaterial({
+  color: 0x0000ff, // Purple
   side: THREE.DoubleSide,
+  transparent: true,
+  opacity: 0.125,
 });
 
 const mixedModelTilesetRaw: ModelTile3DConfig[] = [
   {
     id: "base",
-    weight: 7,
-    model: () => createPlaneTile(purpleMaterial),
+    weight: 20,
+    model: () => createPlaneTile(silverMaterial),
     adjacency: {
       up: ["air"],
-      down: ["cube", "cylinder", "base"],
+      down: ["cube", "cylinder"],
       north: ["base", "air"],
       south: ["base", "air"],
       east: ["base", "air"],
@@ -195,28 +197,14 @@ const mixedModelTilesetRaw: ModelTile3DConfig[] = [
     id: "cube",
     weight: 1,
     // Use helper function for simple box tile
-    model: () => createBoxTile(silverMaterial, 1.25),
-    adjacency: {
-      up: ["cube", "sphere", "air"],
-      down: ["cube", "base", "cylinder"],
-      north: ["cube", "sphere", "air", "block"],
-      south: ["cube", "sphere", "air", "block"],
-      east: ["cube", "sphere", "air", "block"],
-      west: ["cube", "sphere", "air", "block"],
-    },
+    model: () => createBoxTile(silverMaterial, 0.75),
+    adjacency: {},
   },
   {
     id: "cylinder",
-    weight: 5,
+    weight: 2,
     model: () => createCylinderTile(silverMaterial),
-    adjacency: {
-      up: ["cylinder", "cube", "air", "sphere", "cylinder"],
-      down: ["cylinder", "cube", "base", "block"],
-      north: ["cylinder", "cube", "air", "block"],
-      south: ["cylinder", "cube", "air", "block", "cylinder"],
-      east: ["cylinder", "cube", "air", "block", "cylinder"],
-      west: ["cylinder", "cube", "air", "block", "cylinder"],
-    },
+    adjacency: {},
   },
   {
     id: "sphere",
@@ -226,27 +214,16 @@ const mixedModelTilesetRaw: ModelTile3DConfig[] = [
       createSphereTile(
         new THREE.MeshStandardMaterial({ metalness: 1, roughness: 0.66 })
       ),
-    adjacency: {
-      up: ["sphere", "cube", "air"],
-      down: ["block", "cube", "base", "cylinder"],
-      north: ["sphere", "air", "cube", "cylinder"],
-      south: ["sphere", "air", "cube", "cylinder"],
-      east: ["sphere", "air", "cube"],
-      west: ["sphere", "air", "cube", "cylinder"],
-    },
+    adjacency: {},
   },
   {
     id: "air",
-    weight: 8,
+    weight: 20,
     // Use helper function for minimal air tile
     model: createAirTile,
     adjacency: {
-      up: ["air", "cube"],
-      down: ["air", "block", "base", "cube", "sphere", "cylinder"],
-      north: ["air", "block", "base", "cube", "sphere", "cylinder"],
-      south: ["air", "block", "base", "cube", "sphere", "cylinder"],
-      east: ["air", "block", "base", "cube", "sphere", "cylinder"],
-      west: ["air", "block", "base", "cube", "sphere", "cylinder"],
+      up: ["air", "base", "cube", "sphere"],
+      down: ["air", "base", "cube", "sphere"],
     },
   },
 ];

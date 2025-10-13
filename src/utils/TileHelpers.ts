@@ -163,8 +163,8 @@ export function createCylinderTile(
     roughness: 0.6,
     metalness: 0.1,
   }),
-  radiusTop: number = 0.33,
-  radiusBottom: number = 0.33,
+  radiusTop: number = 0.125,
+  radiusBottom: number = 0.125,
   height: number = 1,
   segments: number = 16
 ): THREE.Mesh {

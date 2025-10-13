@@ -13,6 +13,9 @@ export {
   type ModelTile3DConfig,
   type BaseTile3DConfig,
   type WFC3DOptions,
+  type WFC3DError,
+  type SerializedBuffer,
+  type SerializedCell,
 } from "./wfc3d";
 
 // GLB Loaders
@@ -33,7 +36,19 @@ export {
   createBoxTile,
   createSphereTile,
   createCylinderTile,
+  WorkerPool,
+  splitGridIntoRegions,
+  getBoundaryCells,
+  generateWithWorkers,
+  validateTileset,
+  getCompatibilityMatrix,
+  suggestFixes,
   type SceneConfig,
   type LightConfig,
   type SceneSetupResult,
+  type WorkerTask,
+  type WorkerResponse,
+  type Region3D,
+  type ValidationIssue,
+  type ValidationResult,
 } from "./utils";
