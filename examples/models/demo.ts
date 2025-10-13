@@ -10,7 +10,16 @@ import {
   createResizeHandler,
   createAnimationLoop,
 } from "../../src/utils/SceneSetup";
-import generate, { canExpand, resetExpansionState } from "./generate";
+import {
+  createDemoUI,
+  updateGridInfo,
+  type DemoUIElements,
+} from "../../src/utils/DemoUI";
+import generate, {
+  canExpand,
+  resetExpansionState,
+  shrinkGrid,
+} from "./generate";
 import { validateTileset } from "../../src/utils/TilesetValidator";
 
 export class ModelDemo {
@@ -33,11 +42,7 @@ export class ModelDemo {
   isLoading: boolean = false;
   animate: () => void;
 
-  statusContainer: HTMLDivElement;
-  statusText: HTMLDivElement;
-  progressFill: HTMLDivElement;
-  generateBtn: HTMLButtonElement;
-  randomBtn: HTMLButtonElement;
+  ui: DemoUIElements;
   expansionCheckbox: HTMLInputElement;
   workerCountInput: HTMLInputElement;
   useWorkersCheckbox: HTMLInputElement;
@@ -109,7 +114,38 @@ export class ModelDemo {
     });
 
     // Setup UI
-    this.setupUI();
+    this.ui = createDemoUI({
+      title: "3D Model WFC Demo",
+      width: this.width,
+      height: this.height,
+      depth: this.depth,
+      seed: this.currentSeed,
+      onGenerate: () => this.generate(),
+      onRandomSeed: () => {
+        this.currentSeed = Date.now();
+      },
+      onSeedChange: (seed) => {
+        this.currentSeed = seed;
+      },
+      onWidthChange: (width) => {
+        this.width = width;
+        this.onGridSizeChange();
+      },
+      onHeightChange: (height) => {
+        this.height = height;
+        this.onGridSizeChange();
+      },
+      onDepthChange: (depth) => {
+        this.depth = depth;
+        this.onGridSizeChange();
+      },
+      widthRange: { min: 5, max: 30 },
+      heightRange: { min: 1, max: 20 },
+      depthRange: { min: 5, max: 30 },
+    });
+
+    // Add custom UI elements (expansion mode and worker config)
+    this.setupAdditionalUI();
 
     // Handle window resize
     const resizeHandler = createResizeHandler(this.camera, this.renderer);
@@ -125,77 +161,14 @@ export class ModelDemo {
     this.animate();
   }
 
-  private setupUI(): void {
-    // Create UI container
-    const uiContainer = document.createElement("div");
-    uiContainer.className = "ui-container";
-    document.body.appendChild(uiContainer);
+  private setupAdditionalUI(): void {
+    const uiContainer = this.ui.container;
 
-    // Title
-    const title = document.createElement("h2");
-    title.className = "ui-title";
-    title.textContent = "3D Model WFC Demo";
-    uiContainer.appendChild(title);
+    // Find the first separator (after grid controls) and insert custom elements after it
+    const separator = uiContainer.querySelector("hr");
+    if (!separator) return;
 
-    // Info
-    const info = document.createElement("div");
-    info.className = "grid-info";
-    info.textContent = `Grid: ${this.width}×${this.height}×${this.depth}`;
-    uiContainer.appendChild(info);
-
-    // Grid size controls
-    const gridControlsTitle = document.createElement("div");
-    gridControlsTitle.className = "section-title";
-    gridControlsTitle.textContent = "Grid Size";
-    uiContainer.appendChild(gridControlsTitle);
-
-    // Width slider
-    const widthContainer = this.createSlider(
-      "Width",
-      this.width,
-      5,
-      30,
-      (value) => {
-        this.width = value;
-        info.textContent = `Grid: ${this.width}×${this.height}×${this.depth}`;
-        this.onGridSizeChange();
-      }
-    );
-    uiContainer.appendChild(widthContainer);
-
-    // Height slider
-    const heightContainer = this.createSlider(
-      "Height",
-      this.height,
-      3,
-      20,
-      (value) => {
-        this.height = value;
-        info.textContent = `Grid: ${this.width}×${this.height}×${this.depth}`;
-        this.onGridSizeChange();
-      }
-    );
-    uiContainer.appendChild(heightContainer);
-
-    // Depth slider
-    const depthContainer = this.createSlider(
-      "Depth",
-      this.depth,
-      5,
-      30,
-      (value) => {
-        this.depth = value;
-        info.textContent = `Grid: ${this.width}×${this.height}×${this.depth}`;
-        this.onGridSizeChange();
-      }
-    );
-    uiContainer.appendChild(depthContainer);
-
-    // Separator
-    const separator = document.createElement("hr");
-    uiContainer.appendChild(separator);
-
-    // Expansion mode checkbox
+    // Create expansion mode section
     const expansionContainer = document.createElement("div");
     expansionContainer.className = "expansion-container";
     expansionContainer.style.display = "flex";
@@ -203,17 +176,17 @@ export class ModelDemo {
     expansionContainer.style.gap = "8px";
     expansionContainer.style.marginBottom = "12px";
 
-    const expansionCheckbox = document.createElement("input");
-    expansionCheckbox.type = "checkbox";
-    expansionCheckbox.id = "expansion-mode";
-    expansionCheckbox.checked = this.expansionMode;
-    expansionCheckbox.addEventListener("change", () => {
-      this.expansionMode = expansionCheckbox.checked;
+    this.expansionCheckbox = document.createElement("input");
+    this.expansionCheckbox.type = "checkbox";
+    this.expansionCheckbox.id = "expansion-mode";
+    this.expansionCheckbox.checked = this.expansionMode;
+    this.expansionCheckbox.addEventListener("change", () => {
+      this.expansionMode = this.expansionCheckbox.checked;
       if (!this.expansionMode) {
         resetExpansionState();
       }
     });
-    expansionContainer.appendChild(expansionCheckbox);
+    expansionContainer.appendChild(this.expansionCheckbox);
 
     const expansionLabel = document.createElement("label");
     expansionLabel.htmlFor = "expansion-mode";
@@ -221,15 +194,15 @@ export class ModelDemo {
     expansionLabel.style.cursor = "pointer";
     expansionContainer.appendChild(expansionLabel);
 
-    uiContainer.appendChild(expansionContainer);
-    this.expansionCheckbox = expansionCheckbox;
+    // Insert after the first separator
+    separator.insertAdjacentElement("afterend", expansionContainer);
 
-    // Worker configuration
+    // Create worker configuration section
     const workerSectionTitle = document.createElement("div");
     workerSectionTitle.className = "section-title";
     workerSectionTitle.textContent = "Workers";
     workerSectionTitle.style.marginTop = "8px";
-    uiContainer.appendChild(workerSectionTitle);
+    expansionContainer.insertAdjacentElement("afterend", workerSectionTitle);
 
     // Use workers checkbox
     const useWorkersContainer = document.createElement("div");
@@ -238,15 +211,15 @@ export class ModelDemo {
     useWorkersContainer.style.gap = "8px";
     useWorkersContainer.style.marginBottom = "8px";
 
-    const useWorkersCheckbox = document.createElement("input");
-    useWorkersCheckbox.type = "checkbox";
-    useWorkersCheckbox.id = "use-workers";
-    useWorkersCheckbox.checked = this.useWorkers;
-    useWorkersCheckbox.addEventListener("change", () => {
-      this.useWorkers = useWorkersCheckbox.checked;
-      workerCountInput.disabled = !this.useWorkers;
+    this.useWorkersCheckbox = document.createElement("input");
+    this.useWorkersCheckbox.type = "checkbox";
+    this.useWorkersCheckbox.id = "use-workers";
+    this.useWorkersCheckbox.checked = this.useWorkers;
+    this.useWorkersCheckbox.addEventListener("change", () => {
+      this.useWorkers = this.useWorkersCheckbox.checked;
+      this.workerCountInput.disabled = !this.useWorkers;
     });
-    useWorkersContainer.appendChild(useWorkersCheckbox);
+    useWorkersContainer.appendChild(this.useWorkersCheckbox);
 
     const useWorkersLabel = document.createElement("label");
     useWorkersLabel.htmlFor = "use-workers";
@@ -254,8 +227,7 @@ export class ModelDemo {
     useWorkersLabel.style.cursor = "pointer";
     useWorkersContainer.appendChild(useWorkersLabel);
 
-    uiContainer.appendChild(useWorkersContainer);
-    this.useWorkersCheckbox = useWorkersCheckbox;
+    workerSectionTitle.insertAdjacentElement("afterend", useWorkersContainer);
 
     // Worker count input
     const workerCountContainer = document.createElement("div");
@@ -269,20 +241,20 @@ export class ModelDemo {
     workerCountLabel.style.fontSize = "12px";
     workerCountContainer.appendChild(workerCountLabel);
 
-    const workerCountInput = document.createElement("input");
-    workerCountInput.type = "number";
-    workerCountInput.min = "1";
-    workerCountInput.max = (navigator.hardwareConcurrency || 8).toString();
-    workerCountInput.value = this.workerCount.toString();
-    workerCountInput.disabled = !this.useWorkers;
-    workerCountInput.style.width = "60px";
-    workerCountInput.addEventListener("change", () => {
-      const value = parseInt(workerCountInput.value);
+    this.workerCountInput = document.createElement("input");
+    this.workerCountInput.type = "number";
+    this.workerCountInput.min = "1";
+    this.workerCountInput.max = (navigator.hardwareConcurrency || 8).toString();
+    this.workerCountInput.value = this.workerCount.toString();
+    this.workerCountInput.disabled = !this.useWorkers;
+    this.workerCountInput.style.width = "60px";
+    this.workerCountInput.addEventListener("change", () => {
+      const value = parseInt(this.workerCountInput.value);
       if (value > 0 && value <= (navigator.hardwareConcurrency || 8)) {
         this.workerCount = value;
       }
     });
-    workerCountContainer.appendChild(workerCountInput);
+    workerCountContainer.appendChild(this.workerCountInput);
 
     const maxWorkersNote = document.createElement("span");
     maxWorkersNote.textContent = `(max: ${navigator.hardwareConcurrency || 8})`;
@@ -290,132 +262,56 @@ export class ModelDemo {
     maxWorkersNote.style.opacity = "0.7";
     workerCountContainer.appendChild(maxWorkersNote);
 
-    uiContainer.appendChild(workerCountContainer);
-    this.workerCountInput = workerCountInput;
+    useWorkersContainer.insertAdjacentElement("afterend", workerCountContainer);
 
-    // Separator
+    // Add separator before seed section
     const workerSeparator = document.createElement("hr");
-    uiContainer.appendChild(workerSeparator);
-
-    // Seed input
-    const seedContainer = document.createElement("div");
-    seedContainer.className = "seed-container";
-
-    const seedLabel = document.createElement("label");
-    seedLabel.className = "seed-label";
-    seedLabel.textContent = "Seed: ";
-    seedContainer.appendChild(seedLabel);
-
-    const seedInput = document.createElement("input");
-    seedInput.className = "seed-input";
-    seedInput.type = "number";
-    seedInput.value = this.currentSeed.toString();
-    seedInput.addEventListener("change", () => {
-      this.currentSeed = parseInt(seedInput.value) || Date.now();
-    });
-    seedContainer.appendChild(seedInput);
-
-    uiContainer.appendChild(seedContainer);
-
-    // Generate button
-    const generateBtn = document.createElement("button");
-    generateBtn.textContent = "Generate";
-    generateBtn.addEventListener("click", () => this.generate());
-    uiContainer.appendChild(generateBtn);
-
-    // Random seed button
-    const randomBtn = document.createElement("button");
-    randomBtn.textContent = "Random";
-    randomBtn.addEventListener("click", () => {
-      this.currentSeed = Date.now();
-      seedInput.value = this.currentSeed.toString();
-    });
-    uiContainer.appendChild(randomBtn);
-
-    // Status display
-    const statusContainer = document.createElement("div");
-    statusContainer.className = "status-container";
-
-    const statusText = document.createElement("div");
-    statusText.textContent = "Status: Ready";
-    statusContainer.appendChild(statusText);
-
-    const progressBar = document.createElement("div");
-    progressBar.className = "progress-bar";
-
-    const progressFill = document.createElement("div");
-    progressFill.className = "progress-fill";
-    progressBar.appendChild(progressFill);
-
-    statusContainer.appendChild(progressBar);
-    uiContainer.appendChild(statusContainer);
-
-    // Store references
-    this.statusContainer = statusContainer;
-    this.statusText = statusText;
-    this.progressFill = progressFill;
-    this.generateBtn = generateBtn;
-    this.randomBtn = randomBtn;
-  }
-
-  private createSlider(
-    label: string,
-    value: number,
-    min: number,
-    max: number,
-    onChange: (value: number) => void
-  ): HTMLDivElement {
-    const container = document.createElement("div");
-    container.className = "slider-container";
-
-    const labelRow = document.createElement("div");
-    labelRow.className = "slider-label-row";
-
-    const labelEl = document.createElement("label");
-    labelEl.textContent = label;
-    labelRow.appendChild(labelEl);
-
-    const valueEl = document.createElement("span");
-    valueEl.className = "slider-value";
-    valueEl.textContent = value.toString();
-    labelRow.appendChild(valueEl);
-
-    container.appendChild(labelRow);
-
-    const slider = document.createElement("input");
-    slider.type = "range";
-    slider.min = min.toString();
-    slider.max = max.toString();
-    slider.value = value.toString();
-    slider.addEventListener("input", () => {
-      const newValue = parseInt(slider.value);
-      valueEl.textContent = newValue.toString();
-      onChange(newValue);
-    });
-
-    container.appendChild(slider);
-    return container;
+    workerCountContainer.insertAdjacentElement("afterend", workerSeparator);
   }
 
   private onGridSizeChange(): void {
-    // Check if we should auto-expand
+    // Check if we should auto-expand or shrink
     if (this.expansionMode && canExpand()) {
-      // Check if size only increased (expansion is valid)
-      const widthIncreased = this.width >= this.previousWidth;
-      const heightIncreased = this.height >= this.previousHeight;
-      const depthIncreased = this.depth >= this.previousDepth;
+      // Check if size changed
+      const widthChanged = this.width !== this.previousWidth;
+      const heightChanged = this.height !== this.previousHeight;
+      const depthChanged = this.depth !== this.previousDepth;
 
-      // Only auto-expand if all dimensions stayed same or increased
-      if (widthIncreased && heightIncreased && depthIncreased) {
-        // Trigger expansion after a short delay to allow multiple slider changes
+      // Determine if we're expanding, shrinking, or both
+      const widthIncreased = this.width > this.previousWidth;
+      const heightIncreased = this.height > this.previousHeight;
+      const depthIncreased = this.depth > this.previousDepth;
+
+      const widthDecreased = this.width < this.previousWidth;
+      const heightDecreased = this.height < this.previousHeight;
+      const depthDecreased = this.depth < this.previousDepth;
+
+      const anySizeIncreased =
+        widthIncreased || heightIncreased || depthIncreased;
+      const anySizeDecreased =
+        widthDecreased || heightDecreased || depthDecreased;
+
+      if (anySizeDecreased && !anySizeIncreased) {
+        // Only shrinking - remove tiles
+        setTimeout(() => {
+          if (this.expansionMode && !this.isLoading) {
+            this.shrink();
+          }
+        }, 500);
+      } else if (anySizeIncreased && !anySizeDecreased) {
+        // Only expanding - add tiles
         setTimeout(() => {
           if (this.expansionMode && !this.isLoading) {
             this.generate(true);
           }
         }, 500);
-      } else {
-        // Size decreased, need full regeneration
-        resetExpansionState();
+      } else if (anySizeIncreased && anySizeDecreased) {
+        // Mixed expansion and shrinking - do shrink first, then expand
+        setTimeout(() => {
+          if (this.expansionMode && !this.isLoading) {
+            this.shrinkThenExpand();
+          }
+        }, 500);
       }
     }
 
@@ -427,6 +323,17 @@ export class ModelDemo {
 
   private async generate(isExpansion: boolean = false): Promise<void> {
     await generate(this, this.tiles, isExpansion);
+  }
+
+  private async shrink(): Promise<void> {
+    await shrinkGrid(this, this.width, this.height, this.depth);
+  }
+
+  private async shrinkThenExpand(): Promise<void> {
+    // First shrink to the smaller dimensions
+    await shrinkGrid(this, this.width, this.height, this.depth);
+    // Then expand if needed
+    await generate(this, this.tiles, true);
   }
 }
 

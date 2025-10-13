@@ -24,7 +24,7 @@ interface ErrorMessage {
 
 type WorkerResponse = ProgressMessage | CompleteMessage | ErrorMessage;
 
-// Store the last generated grid and buffer for expansion
+// Store the last generated grid and buffer for expansion/shrinking
 let lastGeneratedGrid: string[][][] | null = null;
 let lastBuffer: any = null;
 
@@ -69,16 +69,12 @@ export default async function generate(
   let attempt = 0;
   let lastError: Error | null = null;
 
-  const statusContainer = modelDemo.statusContainer;
-  const statusText = modelDemo.statusText;
-  const progressFill = modelDemo.progressFill;
-  const generateBtn = modelDemo.generateBtn;
-  const randomBtn = modelDemo.randomBtn;
+  const ui = modelDemo.ui;
 
   modelDemo.isLoading = true;
-  statusContainer.classList.add("visible");
-  generateBtn.disabled = true;
-  randomBtn.disabled = true;
+  ui.progressContainer.classList.add("visible");
+  ui.generateBtn.disabled = true;
+  ui.randomBtn.disabled = true;
 
   // Retry loop
   while (attempt < maxRetries) {
@@ -88,13 +84,16 @@ export default async function generate(
       // Show attempt number if retrying
       const attemptText =
         attempt > 1 ? ` (Attempt ${attempt}/${maxRetries})` : "";
-      statusText.textContent = `Loading models...${attemptText}`;
-      progressFill.style.width = "0%";
-      progressFill.style.backgroundColor = "#4ade80"; // Reset color
+      ui.progressContainer.querySelector(
+        ".progress-label"
+      )!.textContent = `Loading models...${attemptText}`;
+      ui.progressFill.style.width = "0%";
+      ui.progressFill.style.backgroundColor = "#4ade80"; // Reset color
       // Load models
-      statusText.textContent = "Loading GLB models...";
+      ui.progressContainer.querySelector(".progress-label")!.textContent =
+        "Loading GLB models...";
       const modelData = await modelDemo.glbLoader.loadTileset(tiles);
-      progressFill.style.width = "30%";
+      ui.progressFill.style.width = "30%";
 
       // Clear existing renderer if starting fresh
       if (modelDemo.modelRenderer && !isExpansion) {
@@ -147,7 +146,8 @@ export default async function generate(
         };
 
         // Run expansion
-        statusText.textContent = "Expanding grid...";
+        ui.progressContainer.querySelector(".progress-label")!.textContent =
+          "Expanding grid...";
         result = await new Promise<string[][][]>((resolve, reject) => {
           if (!modelDemo.worker)
             return reject(new Error("Worker not initialized"));
@@ -157,7 +157,7 @@ export default async function generate(
 
             if (message.type === "progress") {
               const progress = 30 + message.progress * 60; // 30-90%
-              progressFill.style.width = `${progress}%`;
+              ui.progressFill.style.width = `${progress}%`;
             } else if (message.type === "complete") {
               if (message.success && message.data) {
                 resolve(message.data);
@@ -184,7 +184,8 @@ export default async function generate(
         });
       } else {
         // Run full WFC generation
-        statusText.textContent = "Running WFC algorithm...";
+        ui.progressContainer.querySelector(".progress-label")!.textContent =
+          "Running WFC algorithm...";
         result = await new Promise<string[][][]>((resolve, reject) => {
           if (!modelDemo.worker)
             return reject(new Error("Worker not initialized"));
@@ -194,7 +195,7 @@ export default async function generate(
 
             if (message.type === "progress") {
               const progress = 30 + message.progress * 60; // 30-90%
-              progressFill.style.width = `${progress}%`;
+              ui.progressFill.style.width = `${progress}%`;
             } else if (message.type === "complete") {
               if (message.success && message.data) {
                 resolve(message.data);
@@ -223,8 +224,9 @@ export default async function generate(
       }
 
       // Render using instanced meshes
-      statusText.textContent = "Rendering instances...";
-      progressFill.style.width = "95%";
+      ui.progressContainer.querySelector(".progress-label")!.textContent =
+        "Rendering instances...";
+      ui.progressFill.style.width = "95%";
 
       // Filter out 'air' tiles before rendering
       const filteredGrid = result.map((xLayer) =>
@@ -264,17 +266,19 @@ export default async function generate(
       modelDemo.modelRenderer.updateGrid(filteredGrid);
 
       const stats = modelDemo.modelRenderer.getStats();
-      statusText.textContent = `Complete! ${stats.totalInstances} instances, ${stats.tileTypes} types`;
-      progressFill.style.width = "100%";
+      ui.progressContainer.querySelector(
+        ".progress-label"
+      )!.textContent = `Complete! ${stats.totalInstances} instances, ${stats.tileTypes} types`;
+      ui.progressFill.style.width = "100%";
 
       setTimeout(() => {
-        statusContainer.classList.remove("visible");
+        ui.progressContainer.classList.remove("visible");
       }, 2000);
 
       // Success! Exit retry loop
       modelDemo.isLoading = false;
-      generateBtn.disabled = false;
-      randomBtn.disabled = false;
+      ui.generateBtn.disabled = false;
+      ui.randomBtn.disabled = false;
       return;
     } catch (error) {
       lastError = error as Error;
@@ -291,9 +295,11 @@ export default async function generate(
 
       // If we have retries left and it's a contradiction, try again with new seed
       if (attempt < maxRetries && wfcError?.type) {
-        statusText.textContent = `Contradiction detected. Retrying with new seed... (${attempt}/${maxRetries})`;
-        progressFill.style.width = "0%";
-        progressFill.style.backgroundColor = "#ff9800"; // Orange for retry
+        ui.progressContainer.querySelector(
+          ".progress-label"
+        )!.textContent = `Contradiction detected. Retrying with new seed... (${attempt}/${maxRetries})`;
+        ui.progressFill.style.width = "0%";
+        ui.progressFill.style.backgroundColor = "#ff9800"; // Orange for retry
 
         // Use a new random seed for retry
         modelDemo.currentSeed = Date.now() + attempt;
@@ -320,18 +326,20 @@ export default async function generate(
       }
     }
 
-    statusText.textContent = `Failed after ${maxRetries} attempts: ${errorMessage}`;
-    progressFill.style.width = "0%";
-    progressFill.style.backgroundColor = "#ef4444";
+    ui.progressContainer.querySelector(
+      ".progress-label"
+    )!.textContent = `Failed after ${maxRetries} attempts: ${errorMessage}`;
+    ui.progressFill.style.width = "0%";
+    ui.progressFill.style.backgroundColor = "#ef4444";
 
     setTimeout(() => {
-      progressFill.style.backgroundColor = "#4ade80";
+      ui.progressFill.style.backgroundColor = "#4ade80";
     }, 5000);
   }
 
   modelDemo.isLoading = false;
-  generateBtn.disabled = false;
-  randomBtn.disabled = false;
+  ui.generateBtn.disabled = false;
+  ui.randomBtn.disabled = false;
 }
 
 // Export helper to check if expansion is possible
@@ -343,4 +351,103 @@ export function canExpand(): boolean {
 export function resetExpansionState(): void {
   lastGeneratedGrid = null;
   lastBuffer = null;
+}
+
+/**
+ * Shrink the grid by removing tiles
+ */
+export async function shrinkGrid(
+  modelDemo: ModelDemo,
+  newWidth: number,
+  newHeight: number,
+  newDepth: number
+): Promise<void> {
+  if (!lastGeneratedGrid || !modelDemo.modelRenderer) {
+    console.warn("No existing grid to shrink");
+    return;
+  }
+
+  const ui = modelDemo.ui;
+
+  try {
+    // Show progress
+    ui.progressContainer.classList.add("visible");
+    ui.progressContainer.querySelector(".progress-label")!.textContent =
+      "Shrinking grid...";
+    ui.progressFill.style.width = "50%";
+
+    // Create a new shrunk grid
+    const shrunkGrid: string[][][] = [];
+
+    // Copy only the cells within the new dimensions
+    for (let x = 0; x < newWidth && x < lastGeneratedGrid.length; x++) {
+      shrunkGrid[x] = [];
+      for (let y = 0; y < newHeight && y < lastGeneratedGrid[x].length; y++) {
+        shrunkGrid[x][y] = [];
+        for (
+          let z = 0;
+          z < newDepth && z < lastGeneratedGrid[x][y].length;
+          z++
+        ) {
+          shrunkGrid[x][y][z] = lastGeneratedGrid[x][y][z];
+        }
+      }
+    }
+
+    // Update the last generated grid and buffer
+    lastGeneratedGrid = shrunkGrid;
+    lastBuffer = {
+      width: newWidth,
+      height: newHeight,
+      depth: newDepth,
+      cellData: [],
+    };
+
+    // Rebuild cell data for the buffer
+    for (let x = 0; x < shrunkGrid.length; x++) {
+      for (let y = 0; y < shrunkGrid[x].length; y++) {
+        for (let z = 0; z < shrunkGrid[x][y].length; z++) {
+          const tileId = shrunkGrid[x][y][z];
+          lastBuffer.cellData.push({
+            x,
+            y,
+            z,
+            collapsed: true,
+            tileId,
+            possibleTiles: [tileId],
+          });
+        }
+      }
+    }
+
+    // Update renderer offset
+    modelDemo.modelRenderer.setOffset(
+      (-newWidth * modelDemo.cellSize) / 2,
+      (-newHeight * modelDemo.cellSize) / 2,
+      (-newDepth * modelDemo.cellSize) / 2
+    );
+
+    // Filter out 'air' tiles before rendering
+    const filteredGrid = shrunkGrid.map((xLayer) =>
+      xLayer.map((yLayer) =>
+        yLayer.map((tileId) => (tileId === "air" ? "" : tileId))
+      )
+    );
+
+    // Update the renderer with the shrunk grid
+    modelDemo.modelRenderer.updateGrid(filteredGrid);
+
+    ui.progressFill.style.width = "100%";
+    const stats = modelDemo.modelRenderer.getStats();
+    ui.progressContainer.querySelector(
+      ".progress-label"
+    )!.textContent = `Shrunk! ${stats.totalInstances} instances, ${stats.tileTypes} types`;
+
+    setTimeout(() => {
+      ui.progressContainer.classList.remove("visible");
+    }, 1000);
+  } catch (error) {
+    console.error("Shrink error:", error);
+    ui.progressContainer.classList.remove("visible");
+  }
 }

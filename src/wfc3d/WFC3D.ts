@@ -222,15 +222,28 @@ export class WFC3D {
           const tile = this.buffer.tiles.get(tileId);
           if (!tile) continue;
 
+          // Check for inclusive rules first
           const adjacentIds = tile.adjacency.get(dir);
-          if (!adjacentIds) {
-            // No constraints - all tiles allowed
-            for (const t of this.tiles) {
-              allowedTiles.add(t.id);
-            }
-          } else {
+          if (adjacentIds !== undefined) {
+            // Inclusive rule: only these tiles are allowed
             for (const adjId of adjacentIds) {
               allowedTiles.add(adjId);
+            }
+          } else {
+            // Check for exclusive rules
+            const excludedIds = tile.adjacencyExclusive.get(dir);
+            if (excludedIds !== undefined) {
+              // Exclusive rule: all tiles EXCEPT these are allowed
+              for (const t of this.tiles) {
+                if (!excludedIds.has(t.id)) {
+                  allowedTiles.add(t.id);
+                }
+              }
+            } else {
+              // No constraints - all tiles allowed
+              for (const t of this.tiles) {
+                allowedTiles.add(t.id);
+              }
             }
           }
         }
@@ -350,15 +363,28 @@ export class WFC3D {
           const tile = this.buffer.tiles.get(tileId);
           if (!tile) continue;
 
+          // Check for inclusive rules first
           const adjacentIds = tile.adjacency.get(dir);
-          if (!adjacentIds) {
-            // No constraints - all tiles allowed
-            for (const t of this.tiles) {
-              allowedTiles.add(t.id);
-            }
-          } else {
+          if (adjacentIds !== undefined) {
+            // Inclusive rule: only these tiles are allowed
             for (const adjId of adjacentIds) {
               allowedTiles.add(adjId);
+            }
+          } else {
+            // Check for exclusive rules
+            const excludedIds = tile.adjacencyExclusive.get(dir);
+            if (excludedIds !== undefined) {
+              // Exclusive rule: all tiles EXCEPT these are allowed
+              for (const t of this.tiles) {
+                if (!excludedIds.has(t.id)) {
+                  allowedTiles.add(t.id);
+                }
+              }
+            } else {
+              // No constraints - all tiles allowed
+              for (const t of this.tiles) {
+                allowedTiles.add(t.id);
+              }
             }
           }
         }

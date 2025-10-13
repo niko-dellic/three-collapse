@@ -8,6 +8,13 @@ import {
   createResizeHandler,
   createAnimationLoop,
 } from "./utils/SceneSetup";
+import {
+  createDemoUI,
+  showProgress,
+  hideProgress,
+  setButtonEnabled,
+  type DemoUIElements,
+} from "./utils/DemoUI";
 
 // Worker types
 interface ProgressMessage {
@@ -43,6 +50,7 @@ class VoxelDemo {
 
   private tiles: Map<string, VoxelTile3DConfig>;
   private currentSeed: number = Date.now();
+  private ui: DemoUIElements;
 
   constructor() {
     // Create tile map
@@ -84,7 +92,35 @@ class VoxelDemo {
     );
 
     // Setup UI
-    this.setupUI();
+    this.ui = createDemoUI({
+      title: "3D Wave Function Collapse",
+      width: this.width,
+      height: this.height,
+      depth: this.depth,
+      seed: this.currentSeed,
+      onGenerate: () => this.generate(),
+      onRandomSeed: () => {
+        this.currentSeed = Date.now();
+      },
+      onSeedChange: (seed) => {
+        this.currentSeed = seed;
+      },
+      onWidthChange: (width) => {
+        this.width = width;
+        this.updateVoxelGroupPosition();
+      },
+      onHeightChange: (height) => {
+        this.height = height;
+        this.updateVoxelGroupPosition();
+      },
+      onDepthChange: (depth) => {
+        this.depth = depth;
+        this.updateVoxelGroupPosition();
+      },
+      widthRange: { min: 5, max: 50 },
+      heightRange: { min: 1, max: 20 },
+      depthRange: { min: 5, max: 50 },
+    });
 
     // Handle window resize
     const resizeHandler = createResizeHandler(this.camera, this.renderer);
@@ -100,144 +136,10 @@ class VoxelDemo {
     this.animate();
   }
 
-  private setupUI(): void {
-    // Create UI container
-    const uiContainer = document.createElement("div");
-    uiContainer.className = "ui-container voxel-demo";
-    document.body.appendChild(uiContainer);
-
-    // Title
-    const title = document.createElement("h2");
-    title.className = "ui-title";
-    title.textContent = "3D Wave Function Collapse";
-    uiContainer.appendChild(title);
-
-    // Info
-    const info = document.createElement("div");
-    info.className = "grid-info";
-    info.textContent = `Grid: ${this.width}×${this.height}×${this.depth}`;
-    uiContainer.appendChild(info);
-
-    // Grid size controls
-    const gridControlsTitle = document.createElement("div");
-    gridControlsTitle.className = "section-title";
-    gridControlsTitle.textContent = "Grid Size";
-    uiContainer.appendChild(gridControlsTitle);
-
-    // Width slider
-    const widthContainer = this.createSlider(
-      "Width",
-      this.width,
-      5,
-      50,
-      (value) => {
-        this.width = value;
-        info.textContent = `Grid: ${this.width}×${this.height}×${this.depth}`;
-        this.updateVoxelGroupPosition();
-      }
-    );
-    uiContainer.appendChild(widthContainer);
-
-    // Height slider
-    const heightContainer = this.createSlider(
-      "Height",
-      this.height,
-      3,
-      20,
-      (value) => {
-        this.height = value;
-        info.textContent = `Grid: ${this.width}×${this.height}×${this.depth}`;
-        this.updateVoxelGroupPosition();
-      }
-    );
-    uiContainer.appendChild(heightContainer);
-
-    // Depth slider
-    const depthContainer = this.createSlider(
-      "Depth",
-      this.depth,
-      5,
-      50,
-      (value) => {
-        this.depth = value;
-        info.textContent = `Grid: ${this.width}×${this.height}×${this.depth}`;
-        this.updateVoxelGroupPosition();
-      }
-    );
-    uiContainer.appendChild(depthContainer);
-
-    // Separator
-    const separator = document.createElement("hr");
-    uiContainer.appendChild(separator);
-
-    // Seed input
-    const seedContainer = document.createElement("div");
-    seedContainer.className = "seed-container";
-
-    const seedLabel = document.createElement("label");
-    seedLabel.className = "seed-label";
-    seedLabel.textContent = "Seed: ";
-    seedContainer.appendChild(seedLabel);
-
-    const seedInput = document.createElement("input");
-    seedInput.type = "number";
-    seedInput.value = this.currentSeed.toString();
-    seedInput.addEventListener("change", () => {
-      this.currentSeed = parseInt(seedInput.value) || Date.now();
-    });
-    seedContainer.appendChild(seedInput);
-
-    uiContainer.appendChild(seedContainer);
-
-    // Generate button
-    const generateBtn = document.createElement("button");
-    generateBtn.textContent = "Generate";
-    generateBtn.addEventListener("click", () => this.generate());
-    uiContainer.appendChild(generateBtn);
-
-    // Random seed button
-    const randomBtn = document.createElement("button");
-    randomBtn.textContent = "Random Seed";
-    randomBtn.addEventListener("click", () => {
-      this.currentSeed = Date.now();
-      seedInput.value = this.currentSeed.toString();
-    });
-    uiContainer.appendChild(randomBtn);
-
-    // Progress bar
-    const progressContainer = document.createElement("div");
-    progressContainer.className = "progress-container";
-
-    const progressLabel = document.createElement("div");
-    progressLabel.className = "progress-label";
-    progressLabel.textContent = "Generating...";
-    progressContainer.appendChild(progressLabel);
-
-    const progressBar = document.createElement("div");
-    progressBar.className = "progress-bar";
-
-    const progressFill = document.createElement("div");
-    progressFill.className = "progress-fill";
-    progressBar.appendChild(progressFill);
-
-    progressContainer.appendChild(progressBar);
-    uiContainer.appendChild(progressContainer);
-
-    // Store references for later use
-    (this as any).progressContainer = progressContainer;
-    (this as any).progressFill = progressFill;
-    (this as any).generateBtn = generateBtn;
-  }
-
   private async generate(): Promise<void> {
-    const progressContainer = (this as any).progressContainer as HTMLDivElement;
-    const progressFill = (this as any).progressFill as HTMLDivElement;
-    const generateBtn = (this as any).generateBtn as HTMLButtonElement;
-
     // Show progress
-    progressContainer.classList.add("visible");
-    progressFill.style.width = "0%";
-    generateBtn.disabled = true;
+    showProgress(this.ui.progressContainer, this.ui.progressFill, 0);
+    setButtonEnabled(this.ui.generateBtn, false);
 
     // Clear existing voxels
     while (this.voxelGroup.children.length > 0) {
@@ -267,7 +169,11 @@ class VoxelDemo {
           const message = e.data;
 
           if (message.type === "progress") {
-            progressFill.style.width = `${message.progress * 100}%`;
+            showProgress(
+              this.ui.progressContainer,
+              this.ui.progressFill,
+              message.progress
+            );
           } else if (message.type === "complete") {
             if (message.success && message.data) {
               resolve(message.data);
@@ -293,56 +199,17 @@ class VoxelDemo {
       // Render voxels
       this.renderVoxels(result);
 
-      progressFill.style.width = "100%";
+      showProgress(this.ui.progressContainer, this.ui.progressFill, 1);
       setTimeout(() => {
-        progressContainer.classList.remove("visible");
+        hideProgress(this.ui.progressContainer);
       }, 500);
     } catch (error) {
       console.error("Generation error:", error);
       alert(error instanceof Error ? error.message : "Generation failed");
-      progressContainer.classList.remove("visible");
+      hideProgress(this.ui.progressContainer);
     } finally {
-      generateBtn.disabled = false;
+      setButtonEnabled(this.ui.generateBtn, true);
     }
-  }
-
-  private createSlider(
-    label: string,
-    value: number,
-    min: number,
-    max: number,
-    onChange: (value: number) => void
-  ): HTMLDivElement {
-    const container = document.createElement("div");
-    container.className = "slider-container";
-
-    const labelRow = document.createElement("div");
-    labelRow.className = "slider-label-row";
-
-    const labelEl = document.createElement("label");
-    labelEl.textContent = label;
-    labelRow.appendChild(labelEl);
-
-    const valueEl = document.createElement("span");
-    valueEl.className = "slider-value";
-    valueEl.textContent = value.toString();
-    labelRow.appendChild(valueEl);
-
-    container.appendChild(labelRow);
-
-    const slider = document.createElement("input");
-    slider.type = "range";
-    slider.min = min.toString();
-    slider.max = max.toString();
-    slider.value = value.toString();
-    slider.addEventListener("input", () => {
-      const newValue = parseInt(slider.value);
-      valueEl.textContent = newValue.toString();
-      onChange(newValue);
-    });
-
-    container.appendChild(slider);
-    return container;
   }
 
   private updateVoxelGroupPosition(): void {

@@ -25,7 +25,8 @@
     "build:lib": "tsc --project tsconfig.lib.json && vite build --config vite.lib.config.ts",
     "build:demos": "vite build",
     "preview": "vite preview",
-    "prepublishOnly": "npm run build:lib"
+    "prepublishOnly": "npm run build:lib",
+    "type-check": "tsc --noEmit"
   },
   "keywords": [
     "wfc",

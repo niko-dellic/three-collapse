@@ -9,6 +9,9 @@ export interface LoadedModelData {
   geometry: THREE.BufferGeometry;
   material: THREE.Material | THREE.Material[];
   boundingBox: THREE.Box3;
+  position?: THREE.Vector3;
+  rotation?: THREE.Euler;
+  scale?: THREE.Vector3;
 }
 
 /**
@@ -133,6 +136,7 @@ export class GLBTileLoader {
   /**
    * Load all models from a tileset configuration
    * Supports both GLB file paths (string) and geometry functions
+   * Supports material override, position, rotation, and scale per tile
    */
   async loadTileset(
     tileConfigs: ModelTile3DConfig[]
@@ -144,14 +148,16 @@ export class GLBTileLoader {
       if (typeof config.model === "string") {
         // Load from GLB file
         const promise = this.loadModel(config.model).then((modelData) => {
-          modelMap.set(config.id, modelData);
+          const finalModelData = this.applyOverrides(modelData, config);
+          modelMap.set(config.id, finalModelData);
         });
         loadPromises.push(promise);
       } else if (typeof config.model === "function") {
         // Create from geometry function
         try {
           const modelData = this.createModelDataFromGeometry(config.model);
-          modelMap.set(config.id, modelData);
+          const finalModelData = this.applyOverrides(modelData, config);
+          modelMap.set(config.id, finalModelData);
         } catch (error) {
           console.error(
             `Failed to create geometry for tile ${config.id}:`,
@@ -164,6 +170,70 @@ export class GLBTileLoader {
 
     await Promise.all(loadPromises);
     return modelMap;
+  }
+
+  /**
+   * Apply material, position, rotation, and scale overrides to model data
+   */
+  private applyOverrides(
+    modelData: LoadedModelData,
+    config: ModelTile3DConfig
+  ): LoadedModelData {
+    const result = { ...modelData };
+
+    // Apply material override
+    if (config.material) {
+      result.material = Array.isArray(config.material)
+        ? config.material.map((m) => m.clone())
+        : config.material.clone();
+    }
+
+    // Apply position override
+    if (config.position) {
+      if (config.position instanceof THREE.Vector3) {
+        result.position = config.position.clone();
+      } else {
+        result.position = new THREE.Vector3(
+          config.position.x ?? 0,
+          config.position.y ?? 0,
+          config.position.z ?? 0
+        );
+      }
+    }
+
+    // Apply rotation override
+    if (config.rotation) {
+      if (config.rotation instanceof THREE.Euler) {
+        result.rotation = config.rotation.clone();
+      } else {
+        result.rotation = new THREE.Euler(
+          config.rotation.x || 0,
+          config.rotation.y || 0,
+          config.rotation.z || 0
+        );
+      }
+    }
+
+    // Apply scale override
+    if (config.scale !== undefined) {
+      if (config.scale instanceof THREE.Vector3) {
+        result.scale = config.scale.clone();
+      } else if (typeof config.scale === "number") {
+        result.scale = new THREE.Vector3(
+          config.scale,
+          config.scale,
+          config.scale
+        );
+      } else {
+        result.scale = new THREE.Vector3(
+          config.scale.x ?? 1,
+          config.scale.y ?? 1,
+          config.scale.z ?? 1
+        );
+      }
+    }
+
+    return result;
   }
 
   /**

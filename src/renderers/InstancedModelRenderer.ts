@@ -83,22 +83,37 @@ export class InstancedModelRenderer {
       const rotation = new THREE.Quaternion();
       const scale = new THREE.Vector3(1, 1, 1);
 
+      // Get tile-level transforms from modelData
+      const tilePosition = modelData.position || new THREE.Vector3(0, 0, 0);
+      const tileRotation = modelData.rotation || new THREE.Euler(0, 0, 0);
+      const tileScale = modelData.scale || new THREE.Vector3(1, 1, 1);
+
       instances.forEach((instance, index) => {
+        // Grid position + tile-level position offset
         position.set(
-          instance.x * this.cellSize,
-          instance.y * this.cellSize,
-          instance.z * this.cellSize
+          instance.x * this.cellSize + tilePosition.x,
+          instance.y * this.cellSize + tilePosition.y,
+          instance.z * this.cellSize + tilePosition.z
         );
 
-        // Apply rotation if specified (for future use)
+        // Combine tile-level rotation with per-instance rotation
         if (instance.rotation !== undefined) {
-          rotation.setFromAxisAngle(
+          // Per-instance rotation (Y-axis)
+          const instanceQuat = new THREE.Quaternion().setFromAxisAngle(
             new THREE.Vector3(0, 1, 0),
             instance.rotation
           );
+          // Tile-level rotation
+          const tileQuat = new THREE.Quaternion().setFromEuler(tileRotation);
+          // Combine: tile rotation first, then instance rotation
+          rotation.multiplyQuaternions(instanceQuat, tileQuat);
         } else {
-          rotation.identity();
+          // Just tile-level rotation
+          rotation.setFromEuler(tileRotation);
         }
+
+        // Apply tile-level scale
+        scale.copy(tileScale);
 
         matrix.compose(position, rotation, scale);
         instancedMesh.setMatrixAt(index, matrix);

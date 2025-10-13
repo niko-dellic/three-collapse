@@ -34,3 +34,15 @@ export {
   type ValidationIssue,
   type ValidationResult,
 } from "./TilesetValidator";
+
+export {
+  createSlider,
+  createDemoUI,
+  updateGridInfo,
+  showProgress,
+  hideProgress,
+  setButtonEnabled,
+  type SliderConfig,
+  type DemoUIConfig,
+  type DemoUIElements,
+} from "./DemoUI";
