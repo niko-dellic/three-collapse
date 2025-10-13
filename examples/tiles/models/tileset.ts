@@ -76,10 +76,10 @@ const mixedModelTilesetRaw: ModelTile3DConfig[] = [
     adjacency: {
       up: ["air"],
       down: ["cube", "cylinder", "air"],
-      north: ["base", "air"],
-      south: ["base", "air"],
-      east: ["base", "air"],
-      west: ["base", "air"],
+      north: ["base", "air", "quater-pipe", "quater-pipe-straight"],
+      south: ["base", "air", "quater-pipe", "quater-pipe-straight", "halfpipe"],
+      east: ["base", "air", "quater-pipe", "quater-pipe-straight", "halfpipe"],
+      west: ["base", "air", "quater-pipe", "quater-pipe-straight", "halfpipe"],
     },
     scale: 2,
   },
@@ -97,6 +97,32 @@ const mixedModelTilesetRaw: ModelTile3DConfig[] = [
     model: "./models/halfpipe.glb",
     material: silverMaterial,
     adjacency: {},
+  },
+  // {
+  //   id: "bend",
+  //   weight: 20,
+  //   model: "./models/bend.glb",
+  //   material: silverMaterial,
+  //   adjacency: {},
+  // },
+  {
+    id: "quater-pipe",
+    weight: 5,
+    model: "./models/quaterpipe.glb",
+    material: silverMaterial,
+    adjacency: {},
+    scale: { x: 1, y: 1, z: 1 },
+  },
+  {
+    id: "quater-pipe-straight",
+    weight: 5,
+    model: "./models/quaterpipe-straight.glb",
+    material: silverMaterial,
+    adjacency: {
+      northEx: ["quater-pipe", "quater-pipe-straight"],
+      southEx: ["quater-pipe", "quater-pipe-straight"],
+    },
+    scale: { x: 1, y: 1, z: 1 },
   },
   {
     id: "bump",
@@ -136,6 +162,8 @@ const mixedModelTilesetRaw: ModelTile3DConfig[] = [
     // Use helper function for minimal air tile
     model: createAirTile,
     adjacency: {
+      northEx: ["quater-pipe", "quater-pipe-straight"],
+      southEx: ["quater-pipe", "quater-pipe-straight"],
       // up: ["air", "base", "cube", "sphere"],
       // down: ["air", "base", "cube", "sphere"],
     },
