@@ -3,6 +3,14 @@
  * @packageDocumentation
  */
 
+// Main Generator (Primary Entry Point)
+export {
+  WFCGenerator,
+  type WFCGeneratorOptions,
+  type GenerateOptions,
+  type ExpandOptions,
+} from "./generators";
+
 // Core WFC System
 export {
   WFCTile3D,
@@ -43,12 +51,14 @@ export {
   validateTileset,
   getCompatibilityMatrix,
   suggestFixes,
+  DebugGrid,
   type SceneConfig,
   type LightConfig,
   type SceneSetupResult,
   type WorkerTask,
   type WorkerResponse,
   type Region3D,
+  type TileUpdateCallback,
   type ValidationIssue,
   type ValidationResult,
 } from "./utils";

@@ -4,7 +4,6 @@ import {
   createAirTile,
   createBoxTile,
   createCylinderTile,
-  createSphereTile,
   validateTileAdjacency,
 } from "../../../src/utils";
 import { createPlaneTile } from "../../../src/utils/TileHelpers";
@@ -172,3 +171,96 @@ const mixedModelTilesetRaw: ModelTile3DConfig[] = [
 
 // Validate and export the tileset (removes invalid adjacency references)
 export const mixedModelTileset = validateTileAdjacency(mixedModelTilesetRaw);
+
+// @ts-ignore
+const invertY = { x: -1, y: 1, z: 1 };
+
+const blockTilesetRaw: ModelTile3DConfig[] = [
+  {
+    id: "handrail-entrance",
+    weight: 1,
+    model: "./models/blocks/handrail-entrance.glb",
+    material: silverMaterial,
+    adjacency: {},
+  },
+  {
+    id: "corner-inverted",
+    weight: 1,
+    model: "./models/blocks/corner-inverted.glb",
+    material: silverMaterial,
+    adjacency: {},
+  },
+  {
+    id: "spiral-staircase",
+    weight: 1,
+    model: "./models/blocks/spiral-staircase.glb",
+    material: silverMaterial,
+    adjacency: {
+      allEx: ["spiral-staircase"],
+      west: ["spiral-staircase-inverted"],
+      up: ["air"],
+    },
+  },
+  {
+    id: "spiral-staircase-inverted",
+    weight: 1,
+    model: "./models/blocks/spiral-staircase.glb",
+    material: silverMaterial,
+    adjacency: {
+      allEx: ["spiral-staircase-inverted"],
+      east: ["spiral-staircase"],
+      up: ["air"],
+    },
+    scale: invertY,
+  },
+  {
+    id: "square-roof",
+    weight: 1,
+    model: "./models/blocks/square-roof.glb",
+    material: silverMaterial,
+    adjacency: {
+      allEx: ["square-roof"],
+      down: ["air"],
+    },
+  },
+  // {
+  //   id: "clock-corner",
+  //   weight: 1,
+  //   model: "./models/blocks/clock-corner.glb",
+  //   material: silverMaterial,
+  //   adjacency: {
+  //     allEx: ["clock-corner"],
+  //     up: ["ceiling-corner"],
+  //   },
+  // },
+  // {
+  //   id: "ceiling-corner",
+  //   weight: 1,
+  //   model: "./models/blocks/ceiling-corner.glb",
+  //   material: silverMaterial,
+  //   adjacency: {
+  //     allEx: ["ceiling-corner"],
+  //     down: ["clock-corner"],
+  //   },
+  // },
+  // {
+  //   id: "staircase-entrance",
+  //   weight: 1,
+  //   model: "./models/blocks/column-entrance.glb",
+  //   material: silverMaterial,
+  //   adjacency: {
+  //     allEx: ["spiral-staircase-entrance"],
+  //     south: ["spiral-staircase", "staircase-entrance"],
+  //   },
+  // },
+
+  // {
+  //   id: "air",
+  //   weight: 3,
+  //   model: createAirTile,
+  //   adjacency: {},
+  // },
+];
+
+// Validate and export the tileset (removes invalid adjacency references)
+export const blockTileset = validateTileAdjacency(blockTilesetRaw);

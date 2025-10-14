@@ -19,12 +19,26 @@ type EastRule =
 type WestRule =
   | { west?: string[]; westEx?: never }
   | { west?: never; westEx?: string[] };
+type AllRule =
+  | { all?: string[]; allEx?: never }
+  | { all?: never; allEx?: string[] };
 
 /**
  * Adjacency rules with mutual exclusivity enforced per direction
- * You can specify EITHER inclusive (up) OR exclusive (upEx) for each direction, not both
+ *
+ * Base Rules (applied to all faces):
+ * - `all`: Include these tiles on all faces (can be overridden per face)
+ * - `allEx`: Exclude these tiles from all faces (can be overridden per face)
+ *
+ * Per-Face Rules (override base rules):
+ * - `up/down/north/south/east/west`: Inclusive rules for specific faces
+ * - `upEx/downEx/northEx/southEx/eastEx/westEx`: Exclusive rules for specific faces
+ *
+ * You can specify EITHER inclusive OR exclusive for each direction, not both.
+ * Individual face rules override the base `all` or `allEx` rule.
  */
-type AdjacencyRules = UpRule &
+type AdjacencyRules = AllRule &
+  UpRule &
   DownRule &
   NorthRule &
   SouthRule &
@@ -35,12 +49,29 @@ type AdjacencyRules = UpRule &
  * Base configuration for 3D tiles in Wave Function Collapse
  * Supports 6-way adjacency (up, down, north, south, east, west)
  *
- * For each direction, you can specify either:
- * - Inclusive rules (up, down, etc.): Only these tiles are allowed
- * - Exclusive rules (upEx, downEx, etc.): All tiles EXCEPT these are allowed
+ * Adjacency Rules:
+ * - Base rules: `all` or `allEx` apply to all faces
+ * - Per-face rules: `up`, `down`, `north`, `south`, `east`, `west` (or their `Ex` variants)
+ * - Per-face rules override base rules for that specific face
+ *
+ * Rule Types:
+ * - Inclusive (all, up, down, etc.): Only these tiles are allowed
+ * - Exclusive (allEx, upEx, downEx, etc.): All tiles EXCEPT these are allowed
  *
  * Note: You CANNOT specify both inclusive and exclusive for the same direction.
  * TypeScript will show an error if you try to mix them.
+ *
+ * Example:
+ * ```typescript
+ * {
+ *   id: "grass",
+ *   adjacency: {
+ *     all: ["grass", "dirt"],  // Base rule for all faces
+ *     up: ["air"],              // Override for up face
+ *     down: ["dirt"]            // Override for down face
+ *   }
+ * }
+ * ```
  */
 export interface BaseTile3DConfig {
   id: string;
@@ -109,63 +140,101 @@ export class WFCTile3D {
     this.adjacencyExclusive = new Map();
 
     if (config.adjacency) {
-      // Set adjacency for each direction if provided
-      // TypeScript now enforces that only one of (direction, directionEx) can be specified
-      // - Omitting a direction = no restrictions (all tiles allowed)
-      // - Empty array [] = strict restriction (no tiles allowed for inclusive, all allowed for exclusive)
+      // Step 1: Apply base rules to all directions (if specified)
+      // These act as defaults that can be overridden per-face
+      const allDirections = [
+        WFCTile3D.UP,
+        WFCTile3D.DOWN,
+        WFCTile3D.NORTH,
+        WFCTile3D.SOUTH,
+        WFCTile3D.EAST,
+        WFCTile3D.WEST,
+      ];
 
-      // Check inclusive rules
+      if (config.adjacency.all !== undefined) {
+        // Apply inclusive base rule to all directions
+        const baseSet = new Set(config.adjacency.all);
+        for (const dir of allDirections) {
+          this.adjacency.set(dir, new Set(baseSet));
+        }
+      }
+
+      if (config.adjacency.allEx !== undefined) {
+        // Apply exclusive base rule to all directions
+        const baseExSet = new Set(config.adjacency.allEx);
+        for (const dir of allDirections) {
+          this.adjacencyExclusive.set(dir, new Set(baseExSet));
+        }
+      }
+
+      // Step 2: Override with per-face inclusive rules
+      // These override the base rule for specific directions
       if (config.adjacency.up !== undefined) {
+        // Clear any base rule for this direction first
+        this.adjacencyExclusive.delete(WFCTile3D.UP);
         this.adjacency.set(WFCTile3D.UP, new Set(config.adjacency.up));
       }
       if (config.adjacency.down !== undefined) {
+        this.adjacencyExclusive.delete(WFCTile3D.DOWN);
         this.adjacency.set(WFCTile3D.DOWN, new Set(config.adjacency.down));
       }
       if (config.adjacency.north !== undefined) {
+        this.adjacencyExclusive.delete(WFCTile3D.NORTH);
         this.adjacency.set(WFCTile3D.NORTH, new Set(config.adjacency.north));
       }
       if (config.adjacency.south !== undefined) {
+        this.adjacencyExclusive.delete(WFCTile3D.SOUTH);
         this.adjacency.set(WFCTile3D.SOUTH, new Set(config.adjacency.south));
       }
       if (config.adjacency.east !== undefined) {
+        this.adjacencyExclusive.delete(WFCTile3D.EAST);
         this.adjacency.set(WFCTile3D.EAST, new Set(config.adjacency.east));
       }
       if (config.adjacency.west !== undefined) {
+        this.adjacencyExclusive.delete(WFCTile3D.WEST);
         this.adjacency.set(WFCTile3D.WEST, new Set(config.adjacency.west));
       }
 
-      // Check exclusive rules (TypeScript ensures these are mutually exclusive with inclusive)
+      // Step 3: Override with per-face exclusive rules
+      // These override the base rule for specific directions
       if (config.adjacency.upEx !== undefined) {
+        // Clear any base rule for this direction first
+        this.adjacency.delete(WFCTile3D.UP);
         this.adjacencyExclusive.set(
           WFCTile3D.UP,
           new Set(config.adjacency.upEx)
         );
       }
       if (config.adjacency.downEx !== undefined) {
+        this.adjacency.delete(WFCTile3D.DOWN);
         this.adjacencyExclusive.set(
           WFCTile3D.DOWN,
           new Set(config.adjacency.downEx)
         );
       }
       if (config.adjacency.northEx !== undefined) {
+        this.adjacency.delete(WFCTile3D.NORTH);
         this.adjacencyExclusive.set(
           WFCTile3D.NORTH,
           new Set(config.adjacency.northEx)
         );
       }
       if (config.adjacency.southEx !== undefined) {
+        this.adjacency.delete(WFCTile3D.SOUTH);
         this.adjacencyExclusive.set(
           WFCTile3D.SOUTH,
           new Set(config.adjacency.southEx)
         );
       }
       if (config.adjacency.eastEx !== undefined) {
+        this.adjacency.delete(WFCTile3D.EAST);
         this.adjacencyExclusive.set(
           WFCTile3D.EAST,
           new Set(config.adjacency.eastEx)
         );
       }
       if (config.adjacency.westEx !== undefined) {
+        this.adjacency.delete(WFCTile3D.WEST);
         this.adjacencyExclusive.set(
           WFCTile3D.WEST,
           new Set(config.adjacency.westEx)

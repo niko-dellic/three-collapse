@@ -1,9 +1,14 @@
 import { defineConfig } from "vite";
-import { resolve } from "path";
+import path, { resolve } from "path";
 
 export default defineConfig({
   worker: {
     format: "es",
+  },
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "."),
+    },
   },
   build: {
     target: "esnext",

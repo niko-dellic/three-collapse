@@ -1,17 +1,10 @@
 /**
- * Shared UI components for WFC demos
+ * Shared UI components for WFC demos using lil-gui
  */
-
-export interface SliderConfig {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  onChange: (value: number) => void;
-}
+import GUI from "lil-gui";
 
 export interface DemoUIConfig {
-  title: string;
+  title?: string;
   width: number;
   height: number;
   depth: number;
@@ -25,231 +18,285 @@ export interface DemoUIConfig {
   widthRange?: { min: number; max: number };
   heightRange?: { min: number; max: number };
   depthRange?: { min: number; max: number };
+  // Optional expansion and worker controls
+  showExpansionToggle?: boolean;
+  expansionMode?: boolean;
+  onExpansionChange?: (enabled: boolean) => void;
+  showWorkerControls?: boolean;
+  useWorkers?: boolean;
+  workerCount?: number;
+  onUseWorkersChange?: (enabled: boolean) => void;
+  onWorkerCountChange?: (count: number) => void;
+  // Optional debug controls
+  showDebugControls?: boolean;
+  debugWireframe?: boolean;
+  onDebugWireframeChange?: (enabled: boolean) => void;
 }
 
 export interface DemoUIElements {
-  container: HTMLDivElement;
-  gridInfo: HTMLDivElement;
-  seedInput: HTMLInputElement;
-  generateBtn: HTMLButtonElement;
-  randomBtn: HTMLButtonElement;
-  progressContainer: HTMLDivElement;
-  progressFill: HTMLDivElement;
+  gui: GUI;
+  gridFolder: GUI;
+  progressElement?: HTMLDivElement;
 }
 
 /**
- * Creates a slider control with label and value display
- */
-export function createSlider(config: SliderConfig): HTMLDivElement {
-  const container = document.createElement("div");
-  container.className = "slider-container";
-
-  const labelRow = document.createElement("div");
-  labelRow.className = "slider-label-row";
-
-  const labelEl = document.createElement("label");
-  labelEl.textContent = config.label;
-  labelRow.appendChild(labelEl);
-
-  const valueEl = document.createElement("span");
-  valueEl.className = "slider-value";
-  valueEl.textContent = config.value.toString();
-  labelRow.appendChild(valueEl);
-
-  container.appendChild(labelRow);
-
-  const slider = document.createElement("input");
-  slider.type = "range";
-  slider.min = config.min.toString();
-  slider.max = config.max.toString();
-  slider.value = config.value.toString();
-  slider.addEventListener("input", () => {
-    const newValue = parseInt(slider.value);
-    valueEl.textContent = newValue.toString();
-    config.onChange(newValue);
-  });
-
-  container.appendChild(slider);
-  return container;
-}
-
-/**
- * Creates the standard demo UI
+ * Creates the demo UI using lil-gui
  */
 export function createDemoUI(config: DemoUIConfig): DemoUIElements {
-  // Create UI container
-  const uiContainer = document.createElement("div");
-  uiContainer.className = "ui-container";
-  document.body.appendChild(uiContainer);
+  const gui = new GUI({
+    title: config.title || "WFC Demo",
+    width: 300,
+  });
 
-  // Title
-  const title = document.createElement("h2");
-  title.className = "ui-title";
-  title.textContent = config.title;
-  uiContainer.appendChild(title);
+  gui.domElement.style.right = "0px";
 
-  // Grid info
-  const gridInfo = document.createElement("div");
-  gridInfo.className = "grid-info";
-  gridInfo.textContent = `Grid: ${config.width}×${config.height}×${config.depth}`;
-  uiContainer.appendChild(gridInfo);
+  // Create a parameters object that lil-gui can bind to
+  const params = {
+    width: config.width,
+    height: config.height,
+    depth: config.depth,
+    seed: config.seed,
+    generate: config.onGenerate,
+    randomSeed: () => {
+      params.seed = Date.now();
+      seedController.updateDisplay();
+      config.onRandomSeed();
+      config.onSeedChange(params.seed);
+    },
+  };
 
-  // Grid size controls
-  const gridControlsTitle = document.createElement("div");
-  gridControlsTitle.className = "section-title";
-  gridControlsTitle.textContent = "Grid Size";
-  uiContainer.appendChild(gridControlsTitle);
+  // Grid dimensions folder
+  const gridFolder = gui.addFolder("Grid Dimensions");
 
-  // Width slider
-  const widthRange = config.widthRange || { min: 5, max: 50 };
-  const widthContainer = createSlider({
-    label: "Width",
-    value: config.width,
-    min: widthRange.min,
-    max: widthRange.max,
-    onChange: (value) => {
-      gridInfo.textContent = `Grid: ${value}×${config.height}×${config.depth}`;
+  gridFolder
+    .add(
+      params,
+      "width",
+      config.widthRange?.min ?? 5,
+      config.widthRange?.max ?? 30,
+      1
+    )
+    .onChange((value: number) => {
       config.onWidthChange(value);
-    },
-  });
-  uiContainer.appendChild(widthContainer);
+    });
 
-  // Height slider
-  const heightRange = config.heightRange || { min: 1, max: 20 };
-  const heightContainer = createSlider({
-    label: "Height",
-    value: config.height,
-    min: heightRange.min,
-    max: heightRange.max,
-    onChange: (value) => {
-      gridInfo.textContent = `Grid: ${config.width}×${value}×${config.depth}`;
+  gridFolder
+    .add(
+      params,
+      "height",
+      config.heightRange?.min ?? 1,
+      config.heightRange?.max ?? 20,
+      1
+    )
+    .onChange((value: number) => {
       config.onHeightChange(value);
-    },
-  });
-  uiContainer.appendChild(heightContainer);
+    });
 
-  // Depth slider
-  const depthRange = config.depthRange || { min: 5, max: 50 };
-  const depthContainer = createSlider({
-    label: "Depth",
-    value: config.depth,
-    min: depthRange.min,
-    max: depthRange.max,
-    onChange: (value) => {
-      gridInfo.textContent = `Grid: ${config.width}×${config.height}×${value}`;
+  gridFolder
+    .add(
+      params,
+      "depth",
+      config.depthRange?.min ?? 5,
+      config.depthRange?.max ?? 30,
+      1
+    )
+    .onChange((value: number) => {
       config.onDepthChange(value);
-    },
-  });
-  uiContainer.appendChild(depthContainer);
+    });
 
-  // Separator
-  const separator = document.createElement("hr");
-  uiContainer.appendChild(separator);
+  gridFolder.open();
 
-  // Seed input
-  const seedContainer = document.createElement("div");
-  seedContainer.className = "seed-container";
+  // Generation controls
+  const seedController = gui
+    .add(params, "seed")
+    .name("Seed")
+    .onChange((value: number) => {
+      config.onSeedChange(value);
+    });
 
-  const seedLabel = document.createElement("label");
-  seedLabel.className = "seed-label";
-  seedLabel.textContent = "Seed: ";
-  seedContainer.appendChild(seedLabel);
+  gui.add(params, "randomSeed").name("Random Seed");
+  gui.add(params, "generate").name("Generate");
 
-  const seedInput = document.createElement("input");
-  seedInput.className = "seed-input";
-  seedInput.type = "number";
-  seedInput.value = config.seed.toString();
-  seedInput.addEventListener("change", () => {
-    const seed = parseInt(seedInput.value) || Date.now();
-    config.onSeedChange(seed);
-  });
-  seedContainer.appendChild(seedInput);
+  // Expansion mode (optional)
+  if (config.showExpansionToggle && config.onExpansionChange) {
+    const expansionParams = {
+      autoExpand: config.expansionMode ?? false,
+    };
 
-  uiContainer.appendChild(seedContainer);
+    gui
+      .add(expansionParams, "autoExpand")
+      .name("Auto-expand Mode")
+      .onChange((value: boolean) => {
+        config.onExpansionChange!(value);
+      });
+  }
 
-  // Generate button
-  const generateBtn = document.createElement("button");
-  generateBtn.textContent = "Generate";
-  generateBtn.addEventListener("click", config.onGenerate);
-  uiContainer.appendChild(generateBtn);
+  // Worker controls (optional)
+  if (config.showWorkerControls) {
+    const workerFolder = gui.addFolder("Workers");
 
-  // Random seed button
-  const randomBtn = document.createElement("button");
-  randomBtn.textContent = "Random Seed";
-  randomBtn.addEventListener("click", () => {
-    const newSeed = Date.now();
-    seedInput.value = newSeed.toString();
-    config.onRandomSeed();
-  });
-  uiContainer.appendChild(randomBtn);
+    const workerParams = {
+      useWorkers: config.useWorkers ?? true,
+      workerCount: config.workerCount ?? (navigator.hardwareConcurrency || 4),
+    };
 
-  // Progress container
-  const progressContainer = document.createElement("div");
-  progressContainer.className = "progress-container";
+    workerFolder
+      .add(workerParams, "useWorkers")
+      .name("Enable Multi-worker")
+      .onChange((value: boolean) => {
+        if (config.onUseWorkersChange) {
+          config.onUseWorkersChange(value);
+        }
+      });
 
-  const progressLabel = document.createElement("div");
-  progressLabel.className = "progress-label";
-  progressLabel.textContent = "Generating...";
-  progressContainer.appendChild(progressLabel);
+    workerFolder
+      .add(
+        workerParams,
+        "workerCount",
+        1,
+        navigator.hardwareConcurrency || 8,
+        1
+      )
+      .name("Worker Count")
+      .onChange((value: number) => {
+        if (config.onWorkerCountChange) {
+          config.onWorkerCountChange(value);
+        }
+      });
 
-  const progressBar = document.createElement("div");
-  progressBar.className = "progress-bar";
+    workerFolder.open();
+  }
 
-  const progressFill = document.createElement("div");
-  progressFill.className = "progress-fill";
-  progressBar.appendChild(progressFill);
+  // Debug controls (optional)
+  if (config.showDebugControls) {
+    const debugFolder = gui.addFolder("Debug");
 
-  progressContainer.appendChild(progressBar);
-  uiContainer.appendChild(progressContainer);
+    const debugParams = {
+      wireframe: config.debugWireframe ?? false,
+    };
+
+    debugFolder
+      .add(debugParams, "wireframe")
+      .name("Show Wireframe Grid")
+      .onChange((value: boolean) => {
+        if (config.onDebugWireframeChange) {
+          config.onDebugWireframeChange(value);
+        }
+      });
+
+    debugFolder.open();
+  }
+
+  // Create progress element (styled manually since lil-gui doesn't have progress bars)
+  const progressElement = createProgressElement();
+  gui.domElement.appendChild(progressElement);
 
   return {
-    container: uiContainer,
-    gridInfo,
-    seedInput,
-    generateBtn,
-    randomBtn,
-    progressContainer,
-    progressFill,
+    gui,
+    gridFolder,
+    progressElement,
   };
 }
 
 /**
- * Updates the grid info text
+ * Creates a progress bar element to append to the GUI
  */
-export function updateGridInfo(
-  gridInfo: HTMLDivElement,
-  width: number,
-  height: number,
-  depth: number
-): void {
-  gridInfo.textContent = `Grid: ${width}×${height}×${depth}`;
+function createProgressElement(): HTMLDivElement {
+  const container = document.createElement("div");
+  container.className = "progress-container";
+  container.style.cssText = `
+    padding: 8px;
+    margin-top: 8px;
+    display: none;
+  `;
+
+  const label = document.createElement("div");
+  label.className = "progress-label";
+  label.textContent = "Generating...";
+  label.style.cssText = `
+    font-size: 11px;
+    margin-bottom: 4px;
+    font-family: inherit;
+  `;
+
+  const barContainer = document.createElement("div");
+  barContainer.className = "progress-bar";
+  barContainer.style.cssText = `
+    width: 100%;
+    height: 4px;
+    background-color: rgba(0, 0, 0, 0.3);
+    border-radius: 2px;
+    overflow: hidden;
+  `;
+
+  const fill = document.createElement("div");
+  fill.className = "progress-fill";
+  fill.style.cssText = `
+    width: 0%;
+    height: 100%;
+    background-color: var(--focus-color);
+    transition: width 0.2s ease, background-color 0.3s ease;
+  `;
+
+  barContainer.appendChild(fill);
+  container.appendChild(label);
+  container.appendChild(barContainer);
+
+  return container;
 }
 
 /**
- * Shows progress bar with a given progress (0-1)
+ * Shows the progress bar with a message
  */
 export function showProgress(
-  progressContainer: HTMLDivElement,
-  progressFill: HTMLDivElement,
-  progress: number
+  elements: DemoUIElements,
+  message: string = "Generating..."
 ): void {
-  progressContainer.classList.add("visible");
-  progressFill.style.width = `${progress * 100}%`;
+  if (elements.progressElement) {
+    elements.progressElement.style.display = "block";
+    const label = elements.progressElement.querySelector(".progress-label");
+    if (label) {
+      label.textContent = message;
+    }
+  }
 }
 
 /**
- * Hides progress bar
+ * Hides the progress bar
  */
-export function hideProgress(progressContainer: HTMLDivElement): void {
-  progressContainer.classList.remove("visible");
+export function hideProgress(elements: DemoUIElements): void {
+  if (elements.progressElement) {
+    elements.progressElement.style.display = "none";
+  }
 }
 
 /**
- * Sets button enabled state
+ * Updates the progress bar percentage
  */
-export function setButtonEnabled(
-  button: HTMLButtonElement,
-  enabled: boolean
+export function setProgress(elements: DemoUIElements, percent: number): void {
+  if (elements.progressElement) {
+    const fill = elements.progressElement.querySelector(
+      ".progress-fill"
+    ) as HTMLElement;
+    if (fill) {
+      fill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+    }
+  }
+}
+
+/**
+ * Sets the progress bar color
+ */
+export function setProgressColor(
+  elements: DemoUIElements,
+  color: string
 ): void {
-  button.disabled = !enabled;
+  if (elements.progressElement) {
+    const fill = elements.progressElement.querySelector(
+      ".progress-fill"
+    ) as HTMLElement;
+    if (fill) {
+      fill.style.backgroundColor = color;
+    }
+  }
 }

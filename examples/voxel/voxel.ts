@@ -1,25 +1,34 @@
 import * as THREE from "three";
 import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { voxelTileset } from "../examples/tiles/voxels/tileset";
-import type { VoxelTile3DConfig } from "./wfc3d";
+import { voxelTileset } from "../tiles/voxels/tileset";
+import type { VoxelTile3DConfig } from "../../src/wfc3d";
 import {
   createScene,
   addLighting,
   createResizeHandler,
   createAnimationLoop,
-} from "./utils/SceneSetup";
+} from "../../src/utils/SceneSetup";
 import {
   createDemoUI,
   showProgress,
   hideProgress,
-  setButtonEnabled,
+  setProgress,
+  setProgressColor,
   type DemoUIElements,
-} from "./utils/DemoUI";
+} from "../../src/utils/DemoUI";
 
 // Worker types
 interface ProgressMessage {
   type: "progress";
   progress: number;
+}
+
+interface TileUpdateMessage {
+  type: "tile_update";
+  x: number;
+  y: number;
+  z: number;
+  tileId: string;
 }
 
 interface CompleteMessage {
@@ -33,7 +42,11 @@ interface ErrorMessage {
   message: string;
 }
 
-type WorkerResponse = ProgressMessage | CompleteMessage | ErrorMessage;
+type WorkerResponse =
+  | ProgressMessage
+  | TileUpdateMessage
+  | CompleteMessage
+  | ErrorMessage;
 
 class VoxelDemo {
   private scene: THREE.Scene;
@@ -138,8 +151,8 @@ class VoxelDemo {
 
   private async generate(): Promise<void> {
     // Show progress
-    showProgress(this.ui.progressContainer, this.ui.progressFill, 0);
-    setButtonEnabled(this.ui.generateBtn, false);
+    showProgress(this.ui, "Generating...");
+    setProgress(this.ui, 0);
 
     // Clear existing voxels
     while (this.voxelGroup.children.length > 0) {
@@ -156,27 +169,61 @@ class VoxelDemo {
     try {
       // Create worker if not exists
       if (!this.worker) {
-        this.worker = new Worker(new URL("./wfc.worker.ts", import.meta.url), {
-          type: "module",
-        });
+        this.worker = new Worker(
+          new URL("../../src/wfc.worker.ts", import.meta.url),
+          {
+            type: "module",
+          }
+        );
       }
 
-      // Setup promise for worker completion
-      const result = await new Promise<string[][][]>((resolve, reject) => {
+      // Prepare geometry and materials for real-time rendering
+      const geometry = new THREE.BoxGeometry(
+        this.voxelSize,
+        this.voxelSize,
+        this.voxelSize
+      );
+      const materials = new Map<string, THREE.MeshLambertMaterial>();
+
+      // Create materials for each tile type
+      for (const [id, tile] of this.tiles) {
+        if (id === "air") continue; // Don't render air
+
+        const material = new THREE.MeshLambertMaterial({
+          color: tile.color,
+        });
+        materials.set(id, material);
+      }
+
+      // Setup promise for worker completion with real-time tile rendering
+      await new Promise<void>((resolve, reject) => {
         if (!this.worker) return reject(new Error("Worker not initialized"));
 
         this.worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
           const message = e.data;
 
           if (message.type === "progress") {
-            showProgress(
-              this.ui.progressContainer,
-              this.ui.progressFill,
-              message.progress
+            setProgress(this.ui, message.progress * 100);
+          } else if (message.type === "tile_update") {
+            // Real-time tile update! Render immediately
+            const { x, y, z, tileId } = message;
+
+            if (!tileId || tileId === "air") return;
+
+            const material = materials.get(tileId);
+            if (!material) return;
+
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(
+              x * this.voxelSize + this.voxelSize / 2,
+              y * this.voxelSize + this.voxelSize / 2,
+              z * this.voxelSize + this.voxelSize / 2
             );
+
+            this.voxelGroup.add(mesh);
           } else if (message.type === "complete") {
-            if (message.success && message.data) {
-              resolve(message.data);
+            if (message.success) {
+              resolve();
             } else {
               reject(new Error("Generation failed - contradiction occurred"));
             }
@@ -196,19 +243,33 @@ class VoxelDemo {
         });
       });
 
-      // Render voxels
-      this.renderVoxels(result);
+      // Generation complete! Voxels are already rendered via real-time updates
+      console.log(
+        `Generation complete! ${this.voxelGroup.children.length} voxels rendered in real-time.`
+      );
 
-      showProgress(this.ui.progressContainer, this.ui.progressFill, 1);
+      showProgress(
+        this.ui,
+        `Complete! ${this.voxelGroup.children.length} voxels`
+      );
+      setProgress(this.ui, 100);
       setTimeout(() => {
-        hideProgress(this.ui.progressContainer);
-      }, 500);
+        hideProgress(this.ui);
+      }, 1500);
     } catch (error) {
       console.error("Generation error:", error);
-      alert(error instanceof Error ? error.message : "Generation failed");
-      hideProgress(this.ui.progressContainer);
-    } finally {
-      setButtonEnabled(this.ui.generateBtn, true);
+      showProgress(
+        this.ui,
+        `Failed: ${
+          error instanceof Error ? error.message : "Generation failed"
+        }`
+      );
+      setProgress(this.ui, 0);
+      setProgressColor(this.ui, "#ef4444");
+      setTimeout(() => {
+        hideProgress(this.ui);
+        setProgressColor(this.ui, "var(--focus-color)");
+      }, 3000);
     }
   }
 
@@ -218,48 +279,6 @@ class VoxelDemo {
       (-this.height * this.voxelSize) / 2,
       (-this.depth * this.voxelSize) / 2
     );
-  }
-
-  private renderVoxels(data: string[][][]): void {
-    const geometry = new THREE.BoxGeometry(
-      this.voxelSize,
-      this.voxelSize,
-      this.voxelSize
-    );
-    const materials = new Map<string, THREE.MeshLambertMaterial>();
-
-    // Create materials for each tile type
-    for (const [id, tile] of this.tiles) {
-      if (id === "air") continue; // Don't render air
-
-      const material = new THREE.MeshLambertMaterial({
-        color: tile.color,
-      });
-      materials.set(id, material);
-    }
-
-    // Create voxel mesh
-    for (let x = 0; x < this.width; x++) {
-      for (let y = 0; y < this.height; y++) {
-        for (let z = 0; z < this.depth; z++) {
-          const tileId = data[x][y][z];
-
-          if (!tileId || tileId === "air") continue;
-
-          const material = materials.get(tileId);
-          if (!material) continue;
-
-          const mesh = new THREE.Mesh(geometry, material);
-          mesh.position.set(
-            x * this.voxelSize + this.voxelSize / 2,
-            y * this.voxelSize + this.voxelSize / 2,
-            z * this.voxelSize + this.voxelSize / 2
-          );
-
-          this.voxelGroup.add(mesh);
-        }
-      }
-    }
   }
 
   private animate: () => void;

@@ -7,6 +7,16 @@ import {
 import { WFC3D, WFCTile3D, type WFCTile3DConfig } from "../wfc3d";
 
 /**
+ * Callback for tile update notifications
+ */
+export type TileUpdateCallback = (
+  x: number,
+  y: number,
+  z: number,
+  tileId: string
+) => void;
+
+/**
  * Generate WFC grid using multiple workers for parallel processing
  */
 export async function generateWithWorkers(
@@ -16,9 +26,36 @@ export async function generateWithWorkers(
   tiles: WFCTile3DConfig[],
   workerPool: WorkerPool,
   seed?: number,
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
+  onTileUpdate?: TileUpdateCallback
 ): Promise<string[][][]> {
   const workerCount = workerPool.getWorkerCount();
+
+  // Initialize internal result grid
+  const result: string[][][] = Array(width)
+    .fill(null)
+    .map(() =>
+      Array(height)
+        .fill(null)
+        .map(() => Array(depth).fill(""))
+    );
+
+  // Create tile update handler that updates internal grid and calls user callback
+  const handleTileUpdate = (
+    x: number,
+    y: number,
+    z: number,
+    tileId: string
+  ) => {
+    // Update internal grid
+    if (x >= 0 && x < width && y >= 0 && y < height && z >= 0 && z < depth) {
+      result[x][y][z] = tileId;
+    }
+    // Call user callback if provided
+    if (onTileUpdate) {
+      onTileUpdate(x, y, z, tileId);
+    }
+  };
 
   // If only one worker, use simple generation
   if (workerCount === 1) {
@@ -29,7 +66,8 @@ export async function generateWithWorkers(
       tiles,
       workerPool,
       seed,
-      onProgress
+      onProgress,
+      handleTileUpdate
     );
   }
 
@@ -57,39 +95,15 @@ export async function generateWithWorkers(
       region,
       preCollapsedCells,
       workerPool,
-      seed ? seed + index : undefined
+      seed ? seed + index : undefined,
+      handleTileUpdate
     )
   );
 
   // Wait for all regions to complete
-  const regionResults = await Promise.all(regionPromises);
+  await Promise.all(regionPromises);
 
-  // Merge results into single grid
-  const result: string[][][] = Array(width)
-    .fill(null)
-    .map(() =>
-      Array(height)
-        .fill(null)
-        .map(() => Array(depth).fill(""))
-    );
-
-  // Copy each region result into the main grid
-  for (let i = 0; i < regions.length; i++) {
-    const region = regions[i];
-    const regionData = regionResults[i];
-
-    for (let x = region.xMin; x < region.xMax; x++) {
-      for (let y = region.yMin; y < region.yMax; y++) {
-        for (let z = region.zMin; z < region.zMax; z++) {
-          const localX = x - region.xMin;
-          const localY = y - region.yMin;
-          const localZ = z - region.zMin;
-          result[x][y][z] = regionData[localX]?.[localY]?.[localZ] || "";
-        }
-      }
-    }
-  }
-
+  // Internal grid is already populated via handleTileUpdate
   if (onProgress) {
     onProgress(1.0);
   }
@@ -107,7 +121,8 @@ async function generateSingleWorker(
   tiles: WFCTile3DConfig[],
   workerPool: WorkerPool,
   seed?: number,
-  _onProgress?: (progress: number) => void
+  _onProgress?: (progress: number) => void,
+  onTileUpdate?: (x: number, y: number, z: number, tileId: string) => void
 ): Promise<string[][][]> {
   // Note: Progress tracking for single worker is handled by the worker itself
   return await workerPool.executeTask({
@@ -120,6 +135,7 @@ async function generateSingleWorker(
       tiles,
       seed,
     },
+    onTileUpdate,
   });
 }
 
@@ -182,7 +198,8 @@ async function generateRegion(
   region: Region3D,
   preCollapsedCells: Array<{ x: number; y: number; z: number; tileId: string }>,
   workerPool: WorkerPool,
-  seed?: number
+  seed?: number,
+  onTileUpdate?: (x: number, y: number, z: number, tileId: string) => void
 ): Promise<string[][][]> {
   // Filter pre-collapsed cells that are in this region or adjacent
   const relevantCells = preCollapsedCells.filter(
@@ -207,5 +224,6 @@ async function generateRegion(
       region,
       preCollapsedCells: relevantCells,
     },
+    onTileUpdate,
   });
 }

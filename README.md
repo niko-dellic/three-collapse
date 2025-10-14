@@ -11,27 +11,55 @@ A 3D Wave Function Collapse (WFC) implementation built with Three.js and TypeScr
   - **Voxel-based**: Simple colored cubes for prototyping
   - **Model-based**: GLB file support with instanced rendering for memory efficiency
 - **Interactive Demos**:
-  - Voxel demo with simple terrain generation
-  - Model demo with 3D asset loading
+  - Voxel with simple terrain generation
+  - World with 3D asset loading
 - **Customizable Tilesets**: Easy-to-configure tile adjacency rules
 - **TypeScript**: Fully typed codebase
 - **Memory Efficient**: Uses InstancedMesh for rendering thousands of models
 
-## Installation
+## Quick Start
 
-### As a Library (npm package)
+### Installation
 
 ```bash
 npm install three-collapse three
 ```
 
-Then import in your project:
+### Basic Usage with WFCGenerator (Recommended)
+
+The `WFCGenerator` class is the main entry point - it handles workers, retries, expansion, and real-time updates automatically:
+
+```typescript
+import { WFCGenerator } from "three-collapse";
+
+// Create generator
+const generator = new WFCGenerator(myTileset, {
+  workerCount: 4,
+  maxRetries: 3,
+  autoExpansion: true,
+});
+
+// Generate with real-time tile updates
+const grid = await generator.generate(20, 10, 20, {
+  onProgress: (progress) => console.log(`${(progress * 100).toFixed(1)}%`),
+  onTileUpdate: (x, y, z, tileId) => renderer.updateTile(x, y, z, tileId),
+});
+
+// Clean up
+generator.dispose();
+```
+
+📚 **See [WFCGenerator Usage Guide](./docs/WFCGENERATOR_USAGE.md) for complete documentation.**
+
+### Advanced Usage
+
+For lower-level control, you can use the core WFC classes directly:
 
 ```typescript
 import { WFC3D, WFCTile3D, VoxelTile3DConfig } from "three-collapse";
 ```
 
-See [`LIBRARY_USAGE.md`](./LIBRARY_USAGE.md) for complete usage examples.
+See [`LIBRARY_USAGE.md`](./docs/LIBRARY_USAGE.md) for advanced usage examples.
 
 ### For Development
 
@@ -189,7 +217,7 @@ src/
 ├── renderers/
 │   └── InstancedModelRenderer.ts  # Instanced mesh renderer
 ├── wfc.worker.ts              # Web Worker
-└── main.ts                    # Voxel demo
+└── main.ts                    # Voxel
 
 examples/
 ├── models/
@@ -207,7 +235,7 @@ public/
 
 ## Demo Controls
 
-### Voxel Demo (index.html)
+### Voxel (index.html)
 
 - **Generate**: Generate a new voxel world with current seed
 - **Random Seed**: Generate a new random seed
@@ -215,7 +243,7 @@ public/
 - **Mouse**: Orbit camera around the scene
 - **Scroll**: Zoom in/out
 
-### Model Demo (models.html)
+### World (models.html)
 
 - **Generate**: Load models and generate using WFC
 - **Random**: Generate with a new random seed
@@ -223,7 +251,7 @@ public/
 - **Mouse**: Orbit camera around the scene
 - **Scroll**: Zoom in/out
 
-**Note**: The model demo requires GLB files in the `/public/models/` directory. See `/public/models/README.md` for details on obtaining free 3D assets.
+**Note**: The World requires GLB files in the `/public/models/` directory. See `/public/models/README.md` for details on obtaining free 3D assets.
 
 ## Algorithm
 

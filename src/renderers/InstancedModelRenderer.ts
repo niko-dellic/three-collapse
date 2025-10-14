@@ -13,13 +13,24 @@ export interface TileInstance {
 }
 
 /**
+ * Transform overrides for a tile type
+ */
+export interface TileTransformOverride {
+  position?: THREE.Vector3;
+  rotation?: THREE.Euler;
+  scale?: THREE.Vector3;
+}
+
+/**
  * Renders collapsed WFC grid using instanced meshes for memory efficiency
  */
 export class InstancedModelRenderer {
   private scene: THREE.Scene;
   private instancedMeshes: Map<string, THREE.InstancedMesh>;
+  private instanceData: Map<string, TileInstance[]>; // Store instances per tile
   private modelData: Map<string, LoadedModelData>;
   private cellSize: number;
+  private transformOverrides: Map<string, TileTransformOverride>; // Per-tile transform overrides
 
   constructor(
     scene: THREE.Scene,
@@ -30,6 +41,8 @@ export class InstancedModelRenderer {
     this.modelData = modelData;
     this.cellSize = cellSize;
     this.instancedMeshes = new Map();
+    this.instanceData = new Map();
+    this.transformOverrides = new Map();
   }
 
   /**
@@ -62,6 +75,9 @@ export class InstancedModelRenderer {
       }
     }
 
+    // Store instance data
+    this.instanceData = instanceCounts;
+
     // Create instanced meshes for each tile type
     for (const [tileId, instances] of instanceCounts.entries()) {
       const modelData = this.modelData.get(tileId);
@@ -77,47 +93,7 @@ export class InstancedModelRenderer {
         count
       );
 
-      // Set transformation matrices for each instance
-      const matrix = new THREE.Matrix4();
-      const position = new THREE.Vector3();
-      const rotation = new THREE.Quaternion();
-      const scale = new THREE.Vector3(1, 1, 1);
-
-      // Get tile-level transforms from modelData
-      const tilePosition = modelData.position || new THREE.Vector3(0, 0, 0);
-      const tileRotation = modelData.rotation || new THREE.Euler(0, 0, 0);
-      const tileScale = modelData.scale || new THREE.Vector3(1, 1, 1);
-
-      instances.forEach((instance, index) => {
-        // Grid position + tile-level position offset
-        position.set(
-          instance.x * this.cellSize + tilePosition.x,
-          instance.y * this.cellSize + tilePosition.y,
-          instance.z * this.cellSize + tilePosition.z
-        );
-
-        // Combine tile-level rotation with per-instance rotation
-        if (instance.rotation !== undefined) {
-          // Per-instance rotation (Y-axis)
-          const instanceQuat = new THREE.Quaternion().setFromAxisAngle(
-            new THREE.Vector3(0, 1, 0),
-            instance.rotation
-          );
-          // Tile-level rotation
-          const tileQuat = new THREE.Quaternion().setFromEuler(tileRotation);
-          // Combine: tile rotation first, then instance rotation
-          rotation.multiplyQuaternions(instanceQuat, tileQuat);
-        } else {
-          // Just tile-level rotation
-          rotation.setFromEuler(tileRotation);
-        }
-
-        // Apply tile-level scale
-        scale.copy(tileScale);
-
-        matrix.compose(position, rotation, scale);
-        instancedMesh.setMatrixAt(index, matrix);
-      });
+      this.updateInstanceMatrices(instancedMesh, tileId, instances);
 
       instancedMesh.instanceMatrix.needsUpdate = true;
       instancedMesh.castShadow = true;
@@ -193,5 +169,103 @@ export class InstancedModelRenderer {
     // Would need to track the grid during render() to implement this
     // For now, return null to indicate we need a full re-render
     return null;
+  }
+
+  /**
+   * Update transform override for a specific tile type
+   * This will immediately update all instances of that tile
+   */
+  updateTileTransform(
+    tileId: string,
+    transform: Partial<TileTransformOverride>
+  ): void {
+    // Get or create transform override
+    if (!this.transformOverrides.has(tileId)) {
+      this.transformOverrides.set(tileId, {});
+    }
+
+    const override = this.transformOverrides.get(tileId)!;
+
+    // Update override
+    if (transform.position) {
+      override.position = transform.position.clone();
+    }
+    if (transform.rotation) {
+      override.rotation = transform.rotation.clone();
+    }
+    if (transform.scale) {
+      override.scale = transform.scale.clone();
+    }
+
+    // Get the instanced mesh and instance data
+    const instancedMesh = this.instancedMeshes.get(tileId);
+    const instances = this.instanceData.get(tileId);
+
+    if (instancedMesh && instances) {
+      // Recompute all matrices for this tile type
+      this.updateInstanceMatrices(instancedMesh, tileId, instances);
+      instancedMesh.instanceMatrix.needsUpdate = true;
+    }
+  }
+
+  /**
+   * Helper to update instance matrices for a tile type
+   */
+  private updateInstanceMatrices(
+    instancedMesh: THREE.InstancedMesh,
+    tileId: string,
+    instances: TileInstance[]
+  ): void {
+    const modelData = this.modelData.get(tileId);
+    if (!modelData) return;
+
+    const matrix = new THREE.Matrix4();
+    const position = new THREE.Vector3();
+    const rotation = new THREE.Quaternion();
+    const scale = new THREE.Vector3(1, 1, 1);
+
+    // Get base tile-level transforms from modelData
+    let tilePosition = modelData.position || new THREE.Vector3(0, 0, 0);
+    let tileRotation = modelData.rotation || new THREE.Euler(0, 0, 0);
+    let tileScale = modelData.scale || new THREE.Vector3(1, 1, 1);
+
+    // Apply overrides if they exist
+    const override = this.transformOverrides.get(tileId);
+    if (override) {
+      if (override.position) tilePosition = override.position;
+      if (override.rotation) tileRotation = override.rotation;
+      if (override.scale) tileScale = override.scale;
+    }
+
+    instances.forEach((instance, index) => {
+      // Grid position + tile-level position offset
+      position.set(
+        instance.x * this.cellSize + tilePosition.x,
+        instance.y * this.cellSize + tilePosition.y,
+        instance.z * this.cellSize + tilePosition.z
+      );
+
+      // Combine tile-level rotation with per-instance rotation
+      if (instance.rotation !== undefined) {
+        // Per-instance rotation (Y-axis)
+        const instanceQuat = new THREE.Quaternion().setFromAxisAngle(
+          new THREE.Vector3(0, 1, 0),
+          instance.rotation
+        );
+        // Tile-level rotation
+        const tileQuat = new THREE.Quaternion().setFromEuler(tileRotation);
+        // Combine: tile rotation first, then instance rotation
+        rotation.multiplyQuaternions(instanceQuat, tileQuat);
+      } else {
+        // Just tile-level rotation
+        rotation.setFromEuler(tileRotation);
+      }
+
+      // Apply tile-level scale
+      scale.copy(tileScale);
+
+      matrix.compose(position, rotation, scale);
+      instancedMesh.setMatrixAt(index, matrix);
+    });
   }
 }

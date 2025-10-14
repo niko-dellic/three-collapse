@@ -444,8 +444,8 @@ See the `examples/` directory in the repository for complete working examples:
 
 - `examples/tiles/voxels/tileset.ts` - Voxel tileset example
 - `examples/tiles/models/tileset.ts` - Model tileset example
-- `src/main.ts` - Complete voxel demo
-- `examples/models/demo.ts` - Complete model demo
+- `src/main.ts` - Complete Voxel
+- `examples/models/demo.ts` - Complete World
 
 ## License
 

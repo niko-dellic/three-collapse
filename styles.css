@@ -211,7 +211,7 @@ input[type="number"]:focus {
   transition: width 0.3s ease, background-color 0.3s ease;
 }
 
-/* Status Container (for model demo) */
+/* Status Container (for World) */
 .status-container {
   margin-top: 15px;
   padding: 10px;
@@ -255,6 +255,45 @@ hr {
 
 .text-xs {
   font-size: 11px;
+}
+
+/* Tileset Editor */
+.tileset-editor {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) rgba(0, 0, 0, 0.2);
+}
+
+.tileset-editor::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tileset-editor::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.tileset-editor::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+}
+
+.tileset-editor::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.tile-editor {
+  transition: all 0.2s ease;
+}
+
+.tile-editor:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Checkbox styles */
+input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
 }
 
 /* Responsive */

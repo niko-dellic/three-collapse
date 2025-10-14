@@ -12,12 +12,20 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-
+    "noImplicitAny": false,
+    "noImplicitReturns": false,
+    "noImplicitOverride": false,
+    "noImplicitUseStrict": false,
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": [
+    "src",
+    "examples/voxel/voxel.ts",
+    "examples/models/demo.ts",
+    "examples/city/demo.ts"
+  ]
 }

@@ -272,7 +272,7 @@ three-collapse/
 │   ├── wfc3d/                - Core WFC system
 │   ├── loaders/              - GLB loading
 │   ├── renderers/            - Instanced rendering
-│   ├── main.ts               - Voxel demo (not in package)
+│   ├── main.ts               - Voxel (not in package)
 │   └── wfc.worker.ts         - Web Worker (not in package)
 │
 ├── dist/lib/                 - Built library (published)

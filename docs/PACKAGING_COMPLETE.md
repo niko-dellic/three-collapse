@@ -80,7 +80,7 @@ dist/lib/
      "name": "three-collapse",
      "author": "Your Name <your.email@example.com>",
      "repository": {
-       "url": "https://github.com/yourusername/three-collapse.git"
+       "url": "https://github.com/niko-dellic/three-collapse.git"
      }
    }
    ```

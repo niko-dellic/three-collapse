@@ -50,6 +50,14 @@ interface ProgressMessage {
   progress: number;
 }
 
+interface TileUpdateMessage {
+  type: "tile_update";
+  x: number;
+  y: number;
+  z: number;
+  tileId: string;
+}
+
 interface CompleteMessage {
   type: "complete";
   success: boolean;
@@ -91,14 +99,26 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
       }
 
-      // Run generation with progress updates
-      const success = await wfc.generate((progress) => {
-        const progressMsg: ProgressMessage = {
-          type: "progress",
-          progress,
-        };
-        self.postMessage(progressMsg);
-      });
+      // Run generation with progress and tile updates
+      const success = await wfc.generate(
+        (progress) => {
+          const progressMsg: ProgressMessage = {
+            type: "progress",
+            progress,
+          };
+          self.postMessage(progressMsg);
+        },
+        (x, y, z, tileId) => {
+          const tileMsg: TileUpdateMessage = {
+            type: "tile_update",
+            x,
+            y,
+            z,
+            tileId,
+          };
+          self.postMessage(tileMsg);
+        }
+      );
 
       if (success) {
         // Extract result data (only for the region if specified)
@@ -166,14 +186,27 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       });
       wfc.buffer = existingBuffer;
 
-      // Run expansion with progress updates
-      const success = await wfc.expand(message.expansions, (progress) => {
-        const progressMsg: ProgressMessage = {
-          type: "progress",
-          progress,
-        };
-        self.postMessage(progressMsg);
-      });
+      // Run expansion with progress and tile updates
+      const success = await wfc.expand(
+        message.expansions,
+        (progress) => {
+          const progressMsg: ProgressMessage = {
+            type: "progress",
+            progress,
+          };
+          self.postMessage(progressMsg);
+        },
+        (x, y, z, tileId) => {
+          const tileMsg: TileUpdateMessage = {
+            type: "tile_update",
+            x,
+            y,
+            z,
+            tileId,
+          };
+          self.postMessage(tileMsg);
+        }
+      );
 
       if (success) {
         // Extract result data

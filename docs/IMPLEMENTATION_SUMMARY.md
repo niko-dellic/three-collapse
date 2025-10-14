@@ -30,7 +30,7 @@ All tasks from the plan have been successfully implemented. The Wave Function Co
 
 5. **`examples/models/demo.ts`** - Full model-based demo application
 
-   - Similar UI to voxel demo
+   - Similar UI to Voxel
    - GLB model loading with progress indicators
    - WFC generation using Web Worker
    - Instanced mesh rendering
@@ -44,7 +44,7 @@ All tasks from the plan have been successfully implemented. The Wave Function Co
 
 ### Configuration Files
 
-7. **`models.html`** - HTML page for model demo
+7. **`models.html`** - HTML page for World
 
    - Entry point for model-based demo at `/models.html`
    - Styled UI elements
@@ -139,7 +139,7 @@ All tasks from the plan have been successfully implemented. The Wave Function Co
 
 ### 4. ✅ Demo Application
 
-- Full-featured model demo
+- Full-featured World
 - Progress indicators during loading
 - Web Worker for WFC generation
 - Interactive UI controls
@@ -187,13 +187,13 @@ To fully test the implementation, you should:
    npm run dev
    ```
 
-3. **Test voxel demo at `/`**
+3. **Test Voxel at `/`**
 
    - Verify backward compatibility
    - Generate a few worlds
    - Confirm no regressions
 
-4. **Test model demo at `/models.html`**
+4. **Test World at `/models.html`**
 
    - Verify models load successfully
    - Generate WFC grid

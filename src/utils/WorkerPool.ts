@@ -4,6 +4,7 @@
 export interface WorkerTask {
   id: string;
   message: any;
+  onTileUpdate?: (x: number, y: number, z: number, tileId: string) => void;
 }
 
 /**
@@ -88,6 +89,14 @@ export class WorkerPool {
     return new Promise((resolve, reject) => {
       const messageHandler = (e: MessageEvent) => {
         const message = e.data;
+
+        // Handle tile update messages
+        if (message.type === "tile_update") {
+          if (task.onTileUpdate) {
+            task.onTileUpdate(message.x, message.y, message.z, message.tileId);
+          }
+          return; // Don't cleanup, continue processing
+        }
 
         // Only handle completion and error messages
         if (message.type === "complete") {

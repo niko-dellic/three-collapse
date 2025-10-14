@@ -52,7 +52,10 @@ export class WFC3D {
   /**
    * Run the WFC algorithm
    */
-  async generate(onProgress?: (progress: number) => void): Promise<boolean> {
+  async generate(
+    onProgress?: (progress: number) => void,
+    onTileCollapse?: (x: number, y: number, z: number, tileId: string) => void
+  ): Promise<boolean> {
     this.lastError = null; // Clear previous errors
     const totalCells =
       this.buffer.width * this.buffer.height * this.buffer.depth;
@@ -95,6 +98,11 @@ export class WFC3D {
 
       this.buffer.cells[x][y][z].collapse(tileId);
       collapsedCells++;
+
+      // Notify tile collapse callback
+      if (onTileCollapse) {
+        onTileCollapse(x, y, z, tileId);
+      }
 
       // Propagate constraints
       const success = this.propagate(x, y, z);
@@ -288,7 +296,8 @@ export class WFC3D {
       zMin: number;
       zMax: number;
     },
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
+    onTileCollapse?: (x: number, y: number, z: number, tileId: string) => void
   ): Promise<boolean> {
     this.lastError = null; // Clear previous errors
     const oldBuffer = this.buffer;
@@ -462,6 +471,11 @@ export class WFC3D {
 
       this.buffer.cells[x][y][z].collapse(tileId);
       collapsedCells++;
+
+      // Notify tile collapse callback
+      if (onTileCollapse) {
+        onTileCollapse(x, y, z, tileId);
+      }
 
       // Propagate constraints
       const success = this.propagate(x, y, z);

@@ -52,9 +52,10 @@
   "peerDependencies": {
     "three": ">=0.150.0"
   },
-  "dependencies": {},
   "devDependencies": {
+    "@types/node": "^24.7.2",
     "@types/three": "^0.180.0",
+    "lil-gui": "^0.21.0",
     "three": "^0.180.0",
     "typescript": "^5.9.3",
     "vite": "^7.1.9"

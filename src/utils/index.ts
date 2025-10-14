@@ -25,7 +25,10 @@ export {
   type Region3D,
 } from "./RegionSplitter";
 
-export { generateWithWorkers } from "./MultiWorkerGenerator";
+export {
+  generateWithWorkers,
+  type TileUpdateCallback,
+} from "./MultiWorkerGenerator";
 
 export {
   validateTileset,
@@ -36,13 +39,21 @@ export {
 } from "./TilesetValidator";
 
 export {
-  createSlider,
   createDemoUI,
-  updateGridInfo,
   showProgress,
   hideProgress,
-  setButtonEnabled,
-  type SliderConfig,
+  setProgress,
+  setProgressColor,
   type DemoUIConfig,
   type DemoUIElements,
 } from "./DemoUI";
+
+export { DebugGrid } from "./DebugGrid";
+
+export {
+  createTilesetEditor,
+  type TileTransform,
+  type TileTransformCallback,
+  type TilesetEditorConfig,
+  type TilesetEditorElements,
+} from "./TilesetEditor";
