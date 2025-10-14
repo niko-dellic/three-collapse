@@ -89,6 +89,7 @@ Open your browser to the URL shown in the terminal (typically http://localhost:5
 - `/` - Voxel-based demo (colored cubes)
 - `/models.html` - Model-based demo (GLB files)
 - `/adjacency-builder.html` - Visual adjacency builder tool
+- `/adjacency-demo.html` - Complete GLB userData workflow demo
 
 ### Build
 

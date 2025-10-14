@@ -219,7 +219,6 @@ export class AdjacencyBuilderUI {
           Saves back to same folder when exporting
         </div>
         
-        <div style="text-align: center; color: #64748b; margin: 10px 0; font-size: 10px">OR</div>
         
         <div class="file-upload-wrapper">
           <input type="file" id="file-upload" multiple accept=".glb" />
@@ -527,10 +526,10 @@ export class AdjacencyBuilderUI {
           arrayBuffer,
           "",
           (gltf) => {
-            const scene = gltf.scene;
+            const tile = gltf.scene.children[0];
 
             // Check for existing adjacency data in userData
-            const userData = scene.userData.adjacencyData || scene.userData;
+            const userData = tile.userData.adjacencyData || tile.userData;
 
             const existingAdjacency: AdjacencyData = {
               up: new Set(userData.adjacency?.up || []),
@@ -546,7 +545,7 @@ export class AdjacencyBuilderUI {
               model: URL.createObjectURL(file),
               weight: userData.weight || 1,
               adjacency: existingAdjacency,
-              object: scene,
+              object: tile,
             });
 
             // If tile has adjacency data, mark relevant pairs as reviewed

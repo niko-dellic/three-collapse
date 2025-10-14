@@ -4,6 +4,7 @@
     "useDefineForClassFields": true,
     "module": "ESNext",
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
     "skipLibCheck": true,
 
     /* Bundler mode */
@@ -27,6 +28,7 @@
     "examples/voxel/voxel.ts",
     "examples/models/demo.ts",
     "examples/city/demo.ts",
-    "examples/adjacency-builder/demo.ts"
+    "examples/adjacency-builder/demo.ts",
+    "examples/adjacency-demo/demo.ts"
   ]
 }
