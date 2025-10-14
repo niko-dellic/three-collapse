@@ -1,0 +1,538 @@
+[
+  {
+    "id": "ceiling-corner",
+    "weight": 1,
+    "model": "/models/blocks/ceiling-corner.glb",
+    "adjacency": {
+      "up": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "down": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "north": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "south": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "east": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "west": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ]
+    }
+  },
+  {
+    "id": "clock-corner",
+    "weight": 1,
+    "model": "/models/blocks/clock-corner.glb",
+    "adjacency": {
+      "up": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "down": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "north": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "south": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "east": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "west": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ]
+    }
+  },
+  {
+    "id": "column-entrance",
+    "weight": 1,
+    "model": "/models/blocks/column-entrance.glb",
+    "adjacency": {
+      "up": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "down": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "north": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "south": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "east": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "west": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ]
+    }
+  },
+  {
+    "id": "corner-inverted",
+    "weight": 1,
+    "model": "/models/blocks/corner-inverted.glb",
+    "adjacency": {
+      "up": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "down": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "north": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "south": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "east": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "west": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ]
+    }
+  },
+  {
+    "id": "handrail-entrance",
+    "weight": 1,
+    "model": "/models/blocks/handrail-entrance.glb",
+    "adjacency": {
+      "up": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "down": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "north": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "south": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "east": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "west": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ]
+    }
+  },
+  {
+    "id": "roof",
+    "weight": 1,
+    "model": "/models/blocks/roof.glb",
+    "adjacency": {
+      "up": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "down": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "north": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "south": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "east": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "west": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ]
+    }
+  },
+  {
+    "id": "spiral-staircase",
+    "weight": 1,
+    "model": "/models/blocks/spiral-staircase.glb",
+    "adjacency": {
+      "up": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "down": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "north": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "south": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "east": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "west": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ]
+    }
+  },
+  {
+    "id": "square-roof",
+    "weight": 1,
+    "model": "/models/blocks/square-roof.glb",
+    "adjacency": {
+      "up": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "down": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "north": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "south": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "east": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ],
+      "west": [
+        "ceiling-corner",
+        "clock-corner",
+        "column-entrance",
+        "corner-inverted",
+        "handrail-entrance",
+        "roof",
+        "spiral-staircase",
+        "square-roof"
+      ]
+    }
+  }
+]

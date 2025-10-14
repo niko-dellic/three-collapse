@@ -57,3 +57,11 @@ export {
   type TilesetEditorConfig,
   type TilesetEditorElements,
 } from "./TilesetEditor";
+
+export {
+  AdjacencyBuilderUI,
+  type AdjacencyBuilderConfig,
+  type TilePair,
+  type AdjacencyData,
+  type TileData,
+} from "./AdjacencyBuilderUI";

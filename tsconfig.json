@@ -26,6 +26,7 @@
     "src",
     "examples/voxel/voxel.ts",
     "examples/models/demo.ts",
-    "examples/city/demo.ts"
+    "examples/city/demo.ts",
+    "examples/adjacency-builder/demo.ts"
   ]
 }

@@ -13,6 +13,11 @@ A 3D Wave Function Collapse (WFC) implementation built with Three.js and TypeScr
 - **Interactive Demos**:
   - Voxel with simple terrain generation
   - World with 3D asset loading
+- **Adjacency Builder Tool**: Visual interface for building tile adjacency rules
+  - 3D preview of tile pairs
+  - Automatic symmetry enforcement
+  - Export to JSON or GLB formats
+  - Continue from existing tilesets
 - **Customizable Tilesets**: Easy-to-configure tile adjacency rules
 - **TypeScript**: Fully typed codebase
 - **Memory Efficient**: Uses InstancedMesh for rendering thousands of models
@@ -83,6 +88,7 @@ Open your browser to the URL shown in the terminal (typically http://localhost:5
 
 - `/` - Voxel-based demo (colored cubes)
 - `/models.html` - Model-based demo (GLB files)
+- `/adjacency-builder.html` - Visual adjacency builder tool
 
 ### Build
 
@@ -193,6 +199,35 @@ if (success) {
   renderer.render(gridData);
 }
 ```
+
+### Adjacency Builder Tool
+
+Building correct adjacency rules is crucial for WFC. The Adjacency Builder provides a visual interface to define these rules.
+
+**Programmatic Usage**:
+
+```typescript
+import { AdjacencyBuilderUI } from "three-collapse";
+
+new AdjacencyBuilderUI({
+  existingTileset: myTileset,
+  onExportJSON: (json) => {
+    console.log("Exported:", json);
+  },
+});
+```
+
+**Web Interface**:
+
+1. Navigate to `/adjacency-builder.html`
+2. Choose your input mode (Auto-discover / Upload / Continue)
+3. Review each tile pair direction-by-direction
+4. Export to JSON or GLB format
+
+The tool automatically enforces symmetry and optimizes self-pair comparisons.
+
+📚 **See [Adjacency Builder API](./docs/ADJACENCY_BUILDER_API.md) for programmatic usage.**  
+📚 **See [Adjacency Builder Guide](./docs/ADJACENCY_BUILDER.md) for web interface usage.**
 
 ## Architecture
 

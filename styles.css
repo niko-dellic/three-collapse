@@ -1,5 +1,5 @@
 :root {
-  --primary-color: rgb(221, 191, 189);
+  --primary-color: rgb(255, 255, 255);
   --background-color: rgb(54, 54, 54);
   --highlight-color: rgb(130, 8, 195);
 }
@@ -30,7 +30,6 @@ canvas {
 #navbar {
   position: fixed;
   left: 0;
-  right: 0;
   bottom: 0;
   padding: 12px 20px;
   display: flex;

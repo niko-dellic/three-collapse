@@ -27,7 +27,12 @@ export {
 } from "./wfc3d";
 
 // GLB Loaders
-export { GLBTileLoader, type LoadedModelData } from "./loaders";
+export {
+  GLBTileLoader,
+  GLBAdjacencyLoader,
+  type LoadedModelData,
+  type GLBAdjacencyData,
+} from "./loaders";
 
 // Renderers
 export { InstancedModelRenderer, type TileInstance } from "./renderers";
@@ -52,6 +57,7 @@ export {
   getCompatibilityMatrix,
   suggestFixes,
   DebugGrid,
+  AdjacencyBuilderUI,
   type SceneConfig,
   type LightConfig,
   type SceneSetupResult,
@@ -61,4 +67,8 @@ export {
   type TileUpdateCallback,
   type ValidationIssue,
   type ValidationResult,
+  type AdjacencyBuilderConfig,
+  type TilePair,
+  type AdjacencyData,
+  type TileData,
 } from "./utils";

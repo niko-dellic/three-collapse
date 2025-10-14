@@ -59,5 +59,9 @@
     "three": "^0.180.0",
     "typescript": "^5.9.3",
     "vite": "^7.1.9"
+  },
+  "dependencies": {
+    "js-confetti": "^0.13.1",
+    "three-spritetext": "^1.10.0"
   }
 }
