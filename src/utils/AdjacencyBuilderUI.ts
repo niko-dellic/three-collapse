@@ -4,6 +4,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import JSConfetti from "js-confetti";
 import SpriteText from "three-spritetext";
 import type { ModelTile3DConfig } from "../wfc3d";
+import { DebugGrid } from "./DebugGrid";
 import "./AdjacencyBuilderUI.css";
 
 export interface TilePair {
@@ -26,6 +27,7 @@ export interface TileData {
   weight: number;
   adjacency: AdjacencyData;
   object?: THREE.Object3D;
+  sourceFile?: string; // Track source GLB file for export
 }
 
 const OPPOSITE_DIRECTIONS: { [key: string]: string } = {
@@ -71,6 +73,7 @@ export class AdjacencyBuilderUI {
   private controls: OrbitControls;
   private glbLoader: GLTFLoader;
   private jsConfetti: JSConfetti;
+  private debugGrid: DebugGrid;
 
   private tiles: Map<string, TileData> = new Map();
   private reviewedPairs: Set<string> = new Set();
@@ -83,6 +86,7 @@ export class AdjacencyBuilderUI {
   private labelA: SpriteText | null = null;
   private labelB: SpriteText | null = null;
   private showLabels = false;
+  private tileSize = 1.0;
 
   private uiContainer!: HTMLDivElement;
   private config: AdjacencyBuilderConfig;
@@ -132,6 +136,9 @@ export class AdjacencyBuilderUI {
   private noAllBtn!: HTMLButtonElement;
   private autoCenterToggle!: HTMLInputElement;
   private showLabelsToggle!: HTMLInputElement;
+  private showVoxelDebugToggle!: HTMLInputElement;
+  private tileSizeSlider!: HTMLInputElement;
+  private tileSizeValue!: HTMLSpanElement;
   private prevBtn!: HTMLButtonElement;
   private nextBtn!: HTMLButtonElement;
   private skipPairBtn!: HTMLButtonElement;
@@ -190,6 +197,9 @@ export class AdjacencyBuilderUI {
 
     this.glbLoader = new GLTFLoader();
     this.jsConfetti = new JSConfetti();
+
+    // Initialize debug grid with default tile size of 2 (matches DIRECTION_OFFSETS base unit)
+    this.debugGrid = new DebugGrid(this.scene, 2);
 
     // Create UI
     this.createUI();
@@ -258,6 +268,16 @@ export class AdjacencyBuilderUI {
             <input type="checkbox" id="show-labels-toggle" />
             Show tile labels
           </label>
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 8px">
+            <input type="checkbox" id="show-voxel-debug-toggle" />
+            Show voxel boundaries
+          </label>
+          <div style="margin-top: 12px">
+            <label style="display: block; margin-bottom: 5px">
+              Tile Size: <span id="tile-size-value">1</span>
+            </label>
+            <input type="range" id="tile-size-slider" min="1" max="100" step="1" value="1" style="width: 100%" />
+          </div>
         </div>
 
         <div style="margin-top: 15px">
@@ -323,6 +343,15 @@ export class AdjacencyBuilderUI {
     this.showLabelsToggle = document.getElementById(
       "show-labels-toggle"
     ) as HTMLInputElement;
+    this.showVoxelDebugToggle = document.getElementById(
+      "show-voxel-debug-toggle"
+    ) as HTMLInputElement;
+    this.tileSizeSlider = document.getElementById(
+      "tile-size-slider"
+    ) as HTMLInputElement;
+    this.tileSizeValue = document.getElementById(
+      "tile-size-value"
+    ) as HTMLSpanElement;
     this.prevBtn = document.getElementById("prev-btn") as HTMLButtonElement;
     this.nextBtn = document.getElementById("next-btn") as HTMLButtonElement;
     this.skipPairBtn = document.getElementById(
@@ -396,6 +425,21 @@ export class AdjacencyBuilderUI {
       this.showLabels = this.showLabelsToggle.checked;
       if (this.labelA) this.labelA.visible = this.showLabels;
       if (this.labelB) this.labelB.visible = this.showLabels;
+    });
+
+    // Voxel debug toggle
+    this.showVoxelDebugToggle.addEventListener("change", () => {
+      this.debugGrid.setVisible(this.showVoxelDebugToggle.checked);
+    });
+
+    // Tile size slider
+    this.tileSizeSlider.addEventListener("input", () => {
+      this.tileSize = parseFloat(this.tileSizeSlider.value);
+      this.tileSizeValue.textContent = this.tileSize.toString();
+      const pair = this.getCurrentPair();
+      if (pair) {
+        this.displayTilePair(pair, this.DIRECTIONS[this.currentDirection]);
+      }
     });
 
     // Navigation
@@ -526,32 +570,47 @@ export class AdjacencyBuilderUI {
           arrayBuffer,
           "",
           (gltf) => {
-            const tile = gltf.scene.children[0];
-
-            // Check for existing adjacency data in userData
-            const userData = tile.userData.adjacencyData || tile.userData;
-
-            const existingAdjacency: AdjacencyData = {
-              up: new Set(userData.adjacency?.up || []),
-              down: new Set(userData.adjacency?.down || []),
-              north: new Set(userData.adjacency?.north || []),
-              south: new Set(userData.adjacency?.south || []),
-              east: new Set(userData.adjacency?.east || []),
-              west: new Set(userData.adjacency?.west || []),
-            };
-
-            this.tiles.set(filename, {
-              id: filename,
-              model: URL.createObjectURL(file),
-              weight: userData.weight || 1,
-              adjacency: existingAdjacency,
-              object: tile,
+            // Traverse scene to find all mesh objects
+            const meshes: THREE.Mesh[] = [];
+            gltf.scene.traverse((child) => {
+              if (child instanceof THREE.Mesh) {
+                meshes.push(child);
+              }
             });
 
-            // If tile has adjacency data, mark relevant pairs as reviewed
-            if (this.hasAnyAdjacency(existingAdjacency)) {
-              console.log(`✓ Loaded existing adjacencies for: ${filename}`);
-            }
+            console.log(`Found ${meshes.length} mesh(es) in ${filename}.glb`);
+
+            // Process each mesh as a separate tile
+            meshes.forEach((mesh) => {
+              // Generate tile ID: check userData.tileId first, then use filename_meshname
+              const tileId = mesh.userData.tileId || `${filename}_${mesh.name}`;
+
+              // Check for existing adjacency data in userData
+              const userData = mesh.userData.adjacencyData || mesh.userData;
+
+              const existingAdjacency: AdjacencyData = {
+                up: new Set(userData.adjacency?.up || []),
+                down: new Set(userData.adjacency?.down || []),
+                north: new Set(userData.adjacency?.north || []),
+                south: new Set(userData.adjacency?.south || []),
+                east: new Set(userData.adjacency?.east || []),
+                west: new Set(userData.adjacency?.west || []),
+              };
+
+              this.tiles.set(tileId, {
+                id: tileId,
+                model: URL.createObjectURL(file),
+                weight: userData.weight || 1,
+                adjacency: existingAdjacency,
+                object: mesh,
+                sourceFile: filename,
+              });
+
+              // If tile has adjacency data, mark relevant pairs as reviewed
+              if (this.hasAnyAdjacency(existingAdjacency)) {
+                console.log(`  ✓ Loaded existing adjacencies for: ${tileId}`);
+              }
+            });
 
             resolve();
           },
@@ -696,7 +755,10 @@ export class AdjacencyBuilderUI {
       this.tileAObject.position.set(0, 0, 0);
     }
 
-    const offset = this.DIRECTION_OFFSETS[direction];
+    // Apply tile size to the offset (voxel boundary extent), not the geometry scale
+    const offset = this.DIRECTION_OFFSETS[direction]
+      .clone()
+      .multiplyScalar(this.tileSize);
     if (this.autoCenterToggle.checked) {
       this.tileBObject.position.add(offset);
     } else {
@@ -756,6 +818,49 @@ export class AdjacencyBuilderUI {
 
     this.scene.add(this.labelA);
     this.scene.add(this.labelB);
+
+    // Update debug grid to show voxel boundaries
+    this.updateVoxelDebug(offset);
+  }
+
+  private updateVoxelDebug(offsetB: THREE.Vector3): void {
+    // Clear existing debug visualization
+    this.debugGrid.clear();
+
+    // Create material for voxel boundaries
+    const material = new THREE.LineBasicMaterial({
+      color: 0x00ff00,
+      transparent: true,
+      opacity: 0.5,
+      linewidth: 2,
+    });
+
+    // Create voxel A at origin
+    const voxelSizeA = this.tileSize * 2; // Base unit is 2
+    const geometryA = new THREE.BoxGeometry(voxelSizeA, voxelSizeA, voxelSizeA);
+    const edgesA = new THREE.EdgesGeometry(geometryA);
+    const lineA = new THREE.LineSegments(edgesA, material);
+    lineA.position.set(0, 0, 0);
+
+    // Create voxel B at offset position
+    const geometryB = new THREE.BoxGeometry(voxelSizeA, voxelSizeA, voxelSizeA);
+    const edgesB = new THREE.EdgesGeometry(geometryB);
+    const lineB = new THREE.LineSegments(edgesB, material.clone());
+    lineB.position.copy(offsetB);
+
+    // Add to debug grid's internal group
+    // Access the gridGroup through the scene
+    const gridGroup = this.scene.getObjectByName("DebugGrid");
+    if (gridGroup) {
+      gridGroup.add(lineA);
+      gridGroup.add(lineB);
+    }
+
+    // Clean up temporary geometries
+    geometryA.dispose();
+    edgesA.dispose();
+    geometryB.dispose();
+    edgesB.dispose();
   }
 
   private centerObjectAtOrigin(object: THREE.Object3D): void {
@@ -1096,31 +1201,49 @@ export class AdjacencyBuilderUI {
       "three/examples/jsm/exporters/GLTFExporter.js"
     );
 
+    // Group tiles by source file
+    const tilesByFile = new Map<string, TileData[]>();
     for (const tile of this.tiles.values()) {
-      if (!tile.object) continue;
+      const sourceFile = tile.sourceFile || tile.id;
+      if (!tilesByFile.has(sourceFile)) {
+        tilesByFile.set(sourceFile, []);
+      }
+      tilesByFile.get(sourceFile)!.push(tile);
+    }
 
-      // Clone the object to avoid modifying the original
-      const clone = tile.object.clone();
+    // Export each source file
+    for (const [sourceFile, tiles] of tilesByFile.entries()) {
+      // Create a scene containing all tiles from this file
+      const scene = new THREE.Scene();
 
-      // Add adjacency data to userData
-      clone.userData = {
-        tileId: tile.id,
-        weight: tile.weight,
-        adjacency: {
-          up: Array.from(tile.adjacency.up),
-          down: Array.from(tile.adjacency.down),
-          north: Array.from(tile.adjacency.north),
-          south: Array.from(tile.adjacency.south),
-          east: Array.from(tile.adjacency.east),
-          west: Array.from(tile.adjacency.west),
-        },
-      };
+      for (const tile of tiles) {
+        if (!tile.object) continue;
+
+        // Clone the object to avoid modifying the original
+        const clone = tile.object.clone();
+
+        // Add adjacency data to userData
+        clone.userData = {
+          tileId: tile.id,
+          weight: tile.weight,
+          adjacency: {
+            up: Array.from(tile.adjacency.up),
+            down: Array.from(tile.adjacency.down),
+            north: Array.from(tile.adjacency.north),
+            south: Array.from(tile.adjacency.south),
+            east: Array.from(tile.adjacency.east),
+            west: Array.from(tile.adjacency.west),
+          },
+        };
+
+        scene.add(clone);
+      }
 
       // Export to GLB
       const exporter = new GLTFExporter();
       const arrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
         exporter.parse(
-          clone,
+          scene,
           (result) => resolve(result as ArrayBuffer),
           (error) => reject(error),
           { binary: true }
@@ -1128,15 +1251,15 @@ export class AdjacencyBuilderUI {
       });
 
       // Save to directory (overwrite original file)
-      const fileHandle = this.fileHandles.get(tile.id);
+      const fileHandle = this.fileHandles.get(sourceFile);
       if (fileHandle) {
         // @ts-ignore
         const writable = await fileHandle.createWritable();
         await writable.write(arrayBuffer);
         await writable.close();
-        console.log(`✓ Saved: ${tile.id}.glb`);
+        console.log(`✓ Saved: ${sourceFile}.glb (${tiles.length} tile(s))`);
       } else {
-        console.warn(`No file handle for ${tile.id}, skipping`);
+        console.warn(`No file handle for ${sourceFile}, skipping`);
       }
     }
   }
@@ -1146,31 +1269,49 @@ export class AdjacencyBuilderUI {
       "three/examples/jsm/exporters/GLTFExporter.js"
     );
 
+    // Group tiles by source file
+    const tilesByFile = new Map<string, TileData[]>();
     for (const tile of this.tiles.values()) {
-      if (!tile.object) continue;
+      const sourceFile = tile.sourceFile || tile.id;
+      if (!tilesByFile.has(sourceFile)) {
+        tilesByFile.set(sourceFile, []);
+      }
+      tilesByFile.get(sourceFile)!.push(tile);
+    }
 
-      // Clone the object
-      const clone = tile.object.clone();
+    // Export each source file
+    for (const [sourceFile, tiles] of tilesByFile.entries()) {
+      // Create a scene containing all tiles from this file
+      const scene = new THREE.Scene();
 
-      // Add adjacency data to userData
-      clone.userData = {
-        tileId: tile.id,
-        weight: tile.weight,
-        adjacency: {
-          up: Array.from(tile.adjacency.up),
-          down: Array.from(tile.adjacency.down),
-          north: Array.from(tile.adjacency.north),
-          south: Array.from(tile.adjacency.south),
-          east: Array.from(tile.adjacency.east),
-          west: Array.from(tile.adjacency.west),
-        },
-      };
+      for (const tile of tiles) {
+        if (!tile.object) continue;
+
+        // Clone the object
+        const clone = tile.object.clone();
+
+        // Add adjacency data to userData
+        clone.userData = {
+          tileId: tile.id,
+          weight: tile.weight,
+          adjacency: {
+            up: Array.from(tile.adjacency.up),
+            down: Array.from(tile.adjacency.down),
+            north: Array.from(tile.adjacency.north),
+            south: Array.from(tile.adjacency.south),
+            east: Array.from(tile.adjacency.east),
+            west: Array.from(tile.adjacency.west),
+          },
+        };
+
+        scene.add(clone);
+      }
 
       // Export to GLB
       const exporter = new GLTFExporter();
       const arrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
         exporter.parse(
-          clone,
+          scene,
           (result) => resolve(result as ArrayBuffer),
           (error) => reject(error),
           { binary: true }
@@ -1184,9 +1325,11 @@ export class AdjacencyBuilderUI {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${tile.id}.glb`;
+      a.download = `${sourceFile}.glb`;
       a.click();
       URL.revokeObjectURL(url);
+
+      console.log(`✓ Downloaded: ${sourceFile}.glb (${tiles.length} tile(s))`);
 
       // Small delay between downloads to avoid browser blocking
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -1258,6 +1401,7 @@ export class AdjacencyBuilderUI {
   dispose(): void {
     this.renderer.dispose();
     this.controls.dispose();
+    this.debugGrid.dispose();
     if (this.uiContainer) {
       this.uiContainer.remove();
     }

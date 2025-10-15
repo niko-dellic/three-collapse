@@ -58,48 +58,67 @@ async function loadTilesFromGLBFolder(
       const url = (await loadModule()) as string;
       const cleanPath = url.startsWith("/") ? url : path.replace("/public", "");
 
-      // Extract tile ID from filename
+      // Extract filename (without extension)
       const parts = cleanPath.split("/");
       const filename = parts[parts.length - 1];
-      const tileId = filename.replace(/\.glb$/i, "");
+      const filenameWithoutExt = filename.replace(/\.glb$/i, "");
 
       // Load the GLB
       const gltf = await new Promise<any>((resolve, reject) => {
         loader.load(cleanPath, resolve, undefined, reject);
       });
 
-      // Check for adjacency data in userData
-      // Try scene.children[0] first (individual tile export format)
-      // Then fall back to scene.userData (old format)
-      const tile = gltf.scene.children[0];
-      tile.traverse((child) => {
+      // Traverse scene to find all mesh objects
+      const meshes: THREE.Mesh[] = [];
+      gltf.scene.traverse((child) => {
         if (child instanceof THREE.Mesh) {
-          child.material.side = THREE.DoubleSide;
+          meshes.push(child);
         }
       });
-      const userData = tile?.userData || gltf.scene.userData || {};
 
-      // Extract adjacency and weight
-      const adjacency = userData.adjacency || {};
-      const weight = userData.weight || 1;
+      console.log(`  Found ${meshes.length} mesh(es) in ${filename}`);
 
-      const hasAdjacencies = Object.keys(adjacency).length > 0;
-      if (hasAdjacencies) {
-        tilesWithAdjacencies++;
-        console.log(`  ✓ ${tileId}: adjacencies loaded from userData`);
-      } else {
-        console.log(`  ○ ${tileId}: no adjacency data (fresh tile)`);
-      }
+      // Process each mesh as a separate tile
+      meshes.forEach((mesh) => {
+        // Set material to double-sided
+        if (mesh.material) {
+          if (Array.isArray(mesh.material)) {
+            mesh.material.forEach((mat) => {
+              mat.side = THREE.DoubleSide;
+            });
+          } else {
+            mesh.material.side = THREE.DoubleSide;
+          }
+        }
 
-      // Create tile config
-      const config: ModelTile3DConfig = {
-        id: tileId,
-        model: cleanPath,
-        weight,
-        adjacency,
-      };
+        // Generate tile ID: check userData.tileId first, then use filename_meshname
+        const tileId =
+          mesh.userData.tileId || `${filenameWithoutExt}_${mesh.name}`;
 
-      tiles.push(config);
+        // Extract adjacency and weight from mesh userData
+        const userData = mesh.userData;
+        const adjacency = userData.adjacency || {};
+        const weight = userData.weight || 1;
+
+        const hasAdjacencies = Object.keys(adjacency).length > 0;
+        if (hasAdjacencies) {
+          tilesWithAdjacencies++;
+          console.log(`    ✓ ${tileId}: adjacencies loaded from userData`);
+        } else {
+          console.log(`    ○ ${tileId}: no adjacency data (fresh tile)`);
+        }
+
+        // Create tile config
+        const config: ModelTile3DConfig = {
+          id: tileId,
+          model: () => mesh,
+          weight,
+          adjacency,
+          rotation: new THREE.Euler(Math.PI / 2, 0, 0),
+        };
+
+        tiles.push(config);
+      });
     } catch (error) {
       console.error(`  ✗ Error loading ${path}:`, error);
     }
@@ -115,7 +134,7 @@ async function loadTilesFromGLBFolder(
 /**
  * Demo class for GLB-based WFC with embedded adjacency data
  */
-class AdjacencyDemo {
+export class AdjacencyDemo {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
@@ -354,7 +373,7 @@ class AdjacencyDemo {
   }
 
   private async generate(isExpansion: boolean = false): Promise<void> {
-    await generate(this as any, this.tiles, isExpansion);
+    await generate(this, this.tiles, isExpansion);
   }
 
   private async shrink(): Promise<void> {

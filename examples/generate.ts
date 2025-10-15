@@ -8,12 +8,13 @@ import {
   setProgress,
   setProgressColor,
 } from "../src/utils/DemoUI";
+import { AdjacencyDemo } from "./adjacency-demo/demo";
 
 // Global generator instance
 let generator: WFCGenerator | null = null;
 
 export default async function generate(
-  modelDemo: Demo,
+  modelDemo: Demo | AdjacencyDemo,
   tiles: ModelTile3DConfig[],
   isExpansion: boolean = false
 ): Promise<void> {
