@@ -163,6 +163,24 @@ export class InstancedModelRenderer {
   }
 
   /**
+   * Update the cell size and recalculate all instance positions
+   */
+  setCellSize(cellSize: number): void {
+    if (cellSize === this.cellSize) return;
+
+    this.cellSize = cellSize;
+
+    // Update all existing instances with new cell size
+    for (const [tileId, instances] of this.instanceData.entries()) {
+      const instancedMesh = this.instancedMeshes.get(tileId);
+      if (instancedMesh) {
+        this.updateInstanceMatrices(instancedMesh, tileId, instances);
+        instancedMesh.instanceMatrix.needsUpdate = true;
+      }
+    }
+  }
+
+  /**
    * Get the current rendered grid
    */
   getCurrentGrid(): string[][][] | null {

@@ -82,13 +82,6 @@ export interface BaseTile3DConfig {
 }
 
 /**
- * Voxel-based tile configuration
- */
-export interface VoxelTile3DConfig extends BaseTile3DConfig {
-  color?: string;
-}
-
-/**
  * Model-based tile configuration with GLB file support or custom geometry
  */
 export interface ModelTile3DConfig extends BaseTile3DConfig {
@@ -98,12 +91,6 @@ export interface ModelTile3DConfig extends BaseTile3DConfig {
   rotation?: THREE.Euler | { x?: number; y?: number; z?: number }; // optional rotation in radians
   scale?: THREE.Vector3 | number | { x?: number; y?: number; z?: number }; // optional scale (uniform or per-axis)
 }
-
-/**
- * Legacy type alias for backward compatibility
- * @deprecated Use VoxelTile3DConfig instead
- */
-export type WFCTile3DConfig = VoxelTile3DConfig;
 
 export class WFCTile3D {
   id: string;
@@ -121,19 +108,13 @@ export class WFCTile3D {
   static readonly EAST = 4;
   static readonly WEST = 5;
 
-  constructor(config: VoxelTile3DConfig | ModelTile3DConfig) {
+  constructor(config: ModelTile3DConfig) {
     this.id = config.id;
     this.weight = config.weight ?? 1.0;
 
-    // Handle voxel-specific properties
-    if ("color" in config) {
-      this.color = config.color ?? "#808080";
-    }
-
     // Handle model-specific properties
-    if ("model" in config) {
+    if ("model" in config)
       if (typeof config.model === "string") this.filepath = config.model;
-    }
 
     // Initialize adjacency maps
     this.adjacency = new Map();

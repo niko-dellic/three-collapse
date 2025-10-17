@@ -1,9 +1,5 @@
 import * as THREE from "three";
-import type {
-  BaseTile3DConfig,
-  ModelTile3DConfig,
-  VoxelTile3DConfig,
-} from "../wfc3d";
+import type { ModelTile3DConfig } from "../wfc3d";
 
 /**
  * Helper functions for creating common tile geometries
@@ -16,7 +12,7 @@ import type {
  * @param tiles - Array of tile configurations to validate
  * @returns Array of tile configs with cleaned adjacency rules (only valid tile IDs)
  */
-export function validateTileAdjacency<T extends BaseTile3DConfig>(
+export function validateTileAdjacency<T extends ModelTile3DConfig>(
   tiles: T[]
 ): T[] {
   // Get set of all valid tile IDs
@@ -64,9 +60,9 @@ export function validateTileAdjacency<T extends BaseTile3DConfig>(
  * @param tiles - Array of tile configurations
  * @returns Array of tile configs with only serializable properties
  */
-export function prepareTilesForWorker<
-  T extends ModelTile3DConfig | VoxelTile3DConfig
->(tiles: T[]): BaseTile3DConfig[] {
+export function prepareTilesForWorker<T extends ModelTile3DConfig>(
+  tiles: T[]
+): Omit<ModelTile3DConfig, "model">[] {
   return tiles.map(({ id, weight, adjacency }) => ({
     id,
     weight,

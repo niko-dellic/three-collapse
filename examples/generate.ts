@@ -7,7 +7,7 @@ import {
   hideProgress,
   setProgress,
   setProgressColor,
-} from "../src/utils/DemoUI";
+} from "../src/utils/debugUI";
 import { AdjacencyDemo } from "./adjacency-demo/demo";
 
 // Global generator instance
@@ -27,6 +27,8 @@ export default async function generate(
       maxRetries: 3,
       autoExpansion: true,
       seed: modelDemo.currentSeed,
+      scene: modelDemo.scene,
+      cellSize: modelDemo.cellSize,
     });
   } else {
     // Update tiles and seed
@@ -144,13 +146,6 @@ export default async function generate(
       modelDemo.modelRenderer.updateGrid(filteredGrid);
     }
 
-    // Update debug grid
-    modelDemo.debugGrid.updateGrid(
-      modelDemo.width,
-      modelDemo.height,
-      modelDemo.depth
-    );
-
     const stats = modelDemo.modelRenderer.getStats();
     console.log(
       `✅ Generation complete! ${stats.totalInstances} instances rendered in real-time across ${stats.tileTypes} tile types.`
@@ -191,18 +186,16 @@ export function canExpand(): boolean {
   return generator !== null && generator.canExpand();
 }
 
-// Export helper to reset expansion state
-export function resetExpansionState(): void {
-  if (generator) {
-    generator.reset();
-  }
+// Export helper to get the generator instance
+export function getGenerator(): WFCGenerator | null {
+  return generator;
 }
 
 /**
  * Shrink the grid by removing tiles
  */
 export async function shrinkGrid(
-  modelDemo: Demo,
+  modelDemo: Demo | AdjacencyDemo,
   newWidth: number,
   newHeight: number,
   newDepth: number
@@ -238,9 +231,6 @@ export async function shrinkGrid(
 
     // Update the renderer with the shrunk grid
     modelDemo.modelRenderer.updateGrid(filteredGrid);
-
-    // Update debug grid
-    modelDemo.debugGrid.updateGrid(newWidth, newHeight, newDepth);
 
     setProgress(ui, 100);
     const stats = modelDemo.modelRenderer.getStats();

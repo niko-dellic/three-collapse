@@ -1,7 +1,5 @@
 export {
   WFCTile3D,
-  type WFCTile3DConfig,
-  type VoxelTile3DConfig,
   type ModelTile3DConfig,
   type BaseTile3DConfig,
 } from "./WFCTile3D";

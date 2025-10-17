@@ -1,6 +1,8 @@
+import * as THREE from "three";
 import { WorkerPool } from "../utils/WorkerPool";
-import { WFCTile3DConfig, WFC3DError } from "../wfc3d";
+import { ModelTile3DConfig, WFC3DError } from "../wfc3d";
 import { prepareTilesForWorker } from "../utils";
+import { DebugGrid } from "../utils/DebugGrid";
 
 /**
  * Configuration options for WFCGenerator
@@ -14,6 +16,10 @@ export interface WFCGeneratorOptions {
   autoExpansion?: boolean;
   /** Random seed for generation */
   seed?: number;
+  /** THREE.js scene for debug visualization */
+  scene?: THREE.Scene;
+  /** Cell size for debug grid (default: 1) */
+  cellSize?: number;
 }
 
 /**
@@ -78,12 +84,14 @@ type WorkerResponse =
  * Main WFC Generator class - handles all worker management, generation, expansion, and retries
  */
 export class WFCGenerator {
-  private tiles: WFCTile3DConfig[];
+  private tiles: ModelTile3DConfig[];
   private workerPool: WorkerPool;
   private worker: Worker | null = null;
   private maxRetries: number;
   private currentSeed: number;
   private autoExpansion: boolean;
+  private debugGrid: DebugGrid | null = null;
+  private cellSize: number;
 
   // State for expansion
   private lastGeneratedGrid: string[][][] | null = null;
@@ -97,16 +105,22 @@ export class WFCGenerator {
    * @param tiles - Array of tile configurations
    * @param options - Generator options
    */
-  constructor(tiles: WFCTile3DConfig[], options: WFCGeneratorOptions = {}) {
+  constructor(tiles: ModelTile3DConfig[], options: WFCGeneratorOptions = {}) {
     this.tiles = tiles;
     this.maxRetries = options.maxRetries ?? 3;
     this.currentSeed = options.seed ?? Date.now();
     this.autoExpansion = options.autoExpansion ?? false;
+    this.cellSize = options.cellSize ?? 1;
 
     // Create worker pool
     const workerCount =
       options.workerCount ?? (navigator.hardwareConcurrency || 4);
     this.workerPool = new WorkerPool(workerCount);
+
+    // Create debug grid if scene is provided
+    if (options.scene) {
+      this.debugGrid = new DebugGrid(options.scene, this.cellSize);
+    }
   }
 
   /**
@@ -149,6 +163,11 @@ export class WFCGenerator {
         if (this.autoExpansion) {
           this.lastGeneratedGrid = result;
           this.lastBuffer = this.serializeBuffer(result, width, height, depth);
+        }
+
+        // Update debug grid
+        if (this.debugGrid) {
+          this.debugGrid.updateGrid(width, height, depth);
         }
 
         return result;
@@ -249,6 +268,11 @@ export class WFCGenerator {
         newDepth
       );
 
+      // Update debug grid
+      if (this.debugGrid) {
+        this.debugGrid.updateGrid(newWidth, newHeight, newDepth);
+      }
+
       return result;
     } catch (error) {
       console.error("Expansion error:", error);
@@ -301,6 +325,11 @@ export class WFCGenerator {
       newDepth
     );
 
+    // Update debug grid
+    if (this.debugGrid) {
+      this.debugGrid.updateGrid(newWidth, newHeight, newDepth);
+    }
+
     return shrunkGrid;
   }
 
@@ -326,7 +355,7 @@ export class WFCGenerator {
    * Update the tileset
    * @param tiles - New tile configurations
    */
-  setTiles(tiles: WFCTile3DConfig[]): void {
+  setTiles(tiles: ModelTile3DConfig[]): void {
     this.tiles = tiles;
     // Clear expansion state when tiles change
     this.reset();
@@ -355,6 +384,32 @@ export class WFCGenerator {
   }
 
   /**
+   * Get the debug grid instance
+   */
+  getDebugGrid(): DebugGrid | null {
+    return this.debugGrid;
+  }
+
+  /**
+   * Set debug grid visibility
+   */
+  setDebugGridVisible(visible: boolean): void {
+    if (this.debugGrid) {
+      this.debugGrid.setVisible(visible);
+    }
+  }
+
+  /**
+   * Update cell size for the debug grid
+   */
+  setCellSize(cellSize: number): void {
+    this.cellSize = cellSize;
+    if (this.debugGrid) {
+      this.debugGrid.setCellSize(cellSize);
+    }
+  }
+
+  /**
    * Terminate all workers and clean up
    */
   dispose(): void {
@@ -362,6 +417,10 @@ export class WFCGenerator {
     if (this.worker) {
       this.worker.terminate();
       this.worker = null;
+    }
+    if (this.debugGrid) {
+      this.debugGrid.dispose();
+      this.debugGrid = null;
     }
     this.reset();
   }

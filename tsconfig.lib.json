@@ -22,7 +22,10 @@
     "src/wfc3d/**/*",
     "src/loaders/**/*",
     "src/renderers/**/*",
-    "src/index.ts"
+    "src/utils/**/*",
+    "src/generators/**/*",
+    "src/index.ts",
+    "src/vite-env.d.ts"
   ],
   "exclude": [
     "src/main.ts",

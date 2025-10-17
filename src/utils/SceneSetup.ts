@@ -103,6 +103,32 @@ export function createScene(config: SceneConfig = {}): SceneSetupResult {
     controls.maxPolarAngle = maxPolarAngle;
   }
 
+  // Add lighting
+  addLighting(scene, {
+    ambient: { color: 0xffffff, intensity: 0.4 },
+    directional: {
+      color: 0xffffff,
+      intensity: 0.8,
+      position: { x: 20, y: 30, z: 20 },
+      castShadow: true,
+      shadowCamera: { left: -20, right: 20, top: 20, bottom: -20 },
+      shadowMapSize: 2048,
+    },
+    hemisphere: {
+      skyColor: 0x87ceeb,
+      groundColor: 0x8b4513,
+      intensity: 0.3,
+    },
+  });
+
+  // Handle window resize
+  const resizeHandler = createResizeHandler(camera, renderer);
+  window.addEventListener("resize", resizeHandler);
+
+  // Start animation
+  const animate = createAnimationLoop(renderer, scene, camera, controls);
+  animate();
+
   return { scene, camera, renderer, controls };
 }
 

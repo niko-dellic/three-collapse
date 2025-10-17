@@ -110,6 +110,28 @@ export class DebugGrid {
   }
 
   /**
+   * Update cell size and regenerate grid if needed
+   */
+  setCellSize(cellSize: number): void {
+    if (cellSize !== this.cellSize) {
+      this.cellSize = cellSize;
+      // Regenerate grid if it's already been created
+      if (
+        this.currentWidth > 0 ||
+        this.currentHeight > 0 ||
+        this.currentDepth > 0
+      ) {
+        this.clear();
+        this.createWireframeGrid(
+          this.currentWidth,
+          this.currentHeight,
+          this.currentDepth
+        );
+      }
+    }
+  }
+
+  /**
    * Toggle wireframe visibility
    */
   setVisible(visible: boolean): void {

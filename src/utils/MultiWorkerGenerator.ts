@@ -4,7 +4,7 @@ import {
   getBoundaryCells,
   type Region3D,
 } from "./RegionSplitter";
-import { WFC3D, WFCTile3D, type WFCTile3DConfig } from "../wfc3d";
+import { WFC3D, WFCTile3D, type ModelTile3DConfig } from "../wfc3d";
 
 /**
  * Callback for tile update notifications
@@ -23,7 +23,7 @@ export async function generateWithWorkers(
   width: number,
   height: number,
   depth: number,
-  tiles: WFCTile3DConfig[],
+  tiles: ModelTile3DConfig[],
   workerPool: WorkerPool,
   seed?: number,
   onProgress?: (progress: number) => void,
@@ -118,7 +118,7 @@ async function generateSingleWorker(
   width: number,
   height: number,
   depth: number,
-  tiles: WFCTile3DConfig[],
+  tiles: ModelTile3DConfig[],
   workerPool: WorkerPool,
   seed?: number,
   _onProgress?: (progress: number) => void,
@@ -146,7 +146,7 @@ async function generateBoundaries(
   width: number,
   height: number,
   depth: number,
-  tiles: WFCTile3DConfig[],
+  tiles: ModelTile3DConfig[],
   boundaryCells: Array<[number, number, number]>,
   seed?: number
 ): Promise<Array<{ x: number; y: number; z: number; tileId: string }>> {
@@ -194,7 +194,7 @@ async function generateRegion(
   fullWidth: number,
   fullHeight: number,
   fullDepth: number,
-  tiles: WFCTile3DConfig[],
+  tiles: ModelTile3DConfig[],
   region: Region3D,
   preCollapsedCells: Array<{ x: number; y: number; z: number; tileId: string }>,
   workerPool: WorkerPool,

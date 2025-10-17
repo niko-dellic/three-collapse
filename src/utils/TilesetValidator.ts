@@ -1,4 +1,4 @@
-import { WFCTile3D, type BaseTile3DConfig } from "../wfc3d/WFCTile3D";
+import { ModelTile3DConfig, WFCTile3D } from "../wfc3d/WFCTile3D";
 
 export interface ValidationIssue {
   severity: "error" | "warning";
@@ -17,7 +17,9 @@ export interface ValidationResult {
 /**
  * Validate a tileset for common WFC issues
  */
-export function validateTileset(configs: BaseTile3DConfig[]): ValidationResult {
+export function validateTileset(
+  configs: ModelTile3DConfig[]
+): ValidationResult {
   const issues: ValidationIssue[] = [];
   const suggestions: string[] = [];
   const tiles = configs.map((config) => new WFCTile3D(config));
@@ -207,7 +209,7 @@ function checkReachability(tiles: WFCTile3D[]): {
  * Get compatibility matrix for visualization
  */
 export function getCompatibilityMatrix(
-  configs: BaseTile3DConfig[]
+  configs: ModelTile3DConfig[]
 ): Map<string, Map<string, Set<number>>> {
   const tiles = configs.map((config) => new WFCTile3D(config));
   const matrix = new Map<string, Map<string, Set<number>>>();

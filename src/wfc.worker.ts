@@ -1,7 +1,7 @@
 import {
   WFC3D,
   WFCTile3D,
-  type WFCTile3DConfig,
+  type ModelTile3DConfig,
   WFC3DBuffer,
   type SerializedBuffer,
   type WFC3DError,
@@ -12,7 +12,7 @@ interface GenerateMessage {
   width: number;
   height: number;
   depth: number;
-  tiles: WFCTile3DConfig[];
+  tiles: ModelTile3DConfig[];
   seed?: number;
   region?: {
     xMin: number;
@@ -41,7 +41,7 @@ interface ExpandMessage {
     zMin: number;
     zMax: number;
   };
-  tiles: WFCTile3DConfig[];
+  tiles: ModelTile3DConfig[];
   seed?: number;
 }
 

@@ -39,20 +39,23 @@ export {
 } from "./TilesetValidator";
 
 export {
-  createDemoUI,
+  createDebugUI as createDemoUI,
+  DebugUI,
   showProgress,
   hideProgress,
   setProgress,
   setProgressColor,
+  type DebugUIConfig,
   type DemoUIConfig,
   type DemoUIElements,
-} from "./DemoUI";
+  type DemoInstance,
+  type TileTransform,
+} from "./debugUI";
 
 export { DebugGrid } from "./DebugGrid";
 
 export {
   createTilesetEditor,
-  type TileTransform,
   type TileTransformCallback,
   type TilesetEditorConfig,
   type TilesetEditorElements,
