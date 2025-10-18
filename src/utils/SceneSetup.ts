@@ -3,6 +3,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 export interface SceneConfig {
   backgroundColor?: number;
+  fog?: boolean;
   fogColor?: number;
   fogNear?: number;
   fogFar?: number;
@@ -70,7 +71,8 @@ export function createScene(config: SceneConfig = {}): SceneSetupResult {
   // Setup scene
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(backgroundColor);
-  scene.fog = new THREE.Fog(fogColor, fogNear, fogFar);
+
+  if (config.fog) scene.fog = new THREE.Fog(fogColor, fogNear, fogFar);
 
   // Setup camera
   const camera = new THREE.PerspectiveCamera(

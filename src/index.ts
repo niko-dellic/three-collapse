@@ -56,7 +56,6 @@ export {
   DebugGrid,
   AdjacencyBuilderUI,
   DebugUI,
-  createDemoUI,
   showProgress,
   hideProgress,
   setProgress,

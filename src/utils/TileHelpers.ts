@@ -172,3 +172,135 @@ export function createCylinderTile(
   );
   return new THREE.Mesh(geometry, material);
 }
+
+/**
+ * Options for converting GLTF objects to tile configs
+ */
+export interface GLTFToTilesOptions {
+  /** Whether to recursively traverse the object hierarchy (default: true) */
+  recursive?: boolean;
+  /** Prefix to add to tile IDs (e.g., filename without extension) */
+  idPrefix?: string;
+  /** Base rotation to apply to all tiles */
+  baseRotation?: THREE.Euler;
+  /** Base position offset to apply to all tiles */
+  basePosition?: THREE.Vector3;
+  /** Base scale to apply to all tiles */
+  baseScale?: THREE.Vector3;
+  /** Whether to set materials to double-sided (default: true) */
+  doubleSided?: boolean;
+  /** Default weight for tiles without userData.weight (default: 1) */
+  defaultWeight?: number;
+}
+
+/**
+ * Converts a GLTF scene/object to an array of ModelTile3DConfig
+ *
+ * This utility extracts meshes from a loaded GLTF object and converts them to
+ * tile configurations, reading adjacency data and other properties from userData.
+ *
+ * @param object - The THREE.Object3D (typically from GLTF.scene) to convert
+ * @param options - Configuration options for the conversion
+ * @returns Array of ModelTile3DConfig objects
+ *
+ * @example
+ * ```typescript
+ * const gltf = await gltfLoader.loadAsync('model.glb');
+ * const tiles = gltfObjectToTiles(gltf.scene, {
+ *   idPrefix: 'building',
+ *   baseRotation: new THREE.Euler(Math.PI / 2, 0, 0),
+ *   recursive: true
+ * });
+ * ```
+ *
+ * Expected userData structure on meshes:
+ * - `tileId` (string): Custom tile ID (optional, falls back to mesh name)
+ * - `adjacency` (object): Adjacency rules (e.g., { north: ['tile1', 'tile2'], south: [...] })
+ * - `weight` (number): Tile weight for WFC probability (default: 1)
+ */
+export function gltfObjectToTiles(
+  object: THREE.Object3D,
+  options: GLTFToTilesOptions = {}
+): ModelTile3DConfig[] {
+  const {
+    recursive = true,
+    idPrefix = "",
+    baseRotation,
+    basePosition,
+    baseScale,
+    doubleSided = true,
+    defaultWeight = 1,
+  } = options;
+
+  const meshes: THREE.Mesh[] = [];
+
+  if (recursive) {
+    // Recursively traverse the object hierarchy
+    object.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        meshes.push(child);
+      }
+    });
+  } else {
+    // Only check direct children
+    object.children.forEach((child) => {
+      if (child instanceof THREE.Mesh) {
+        meshes.push(child);
+      }
+    });
+
+    // If the object itself is a mesh, include it
+    if (object instanceof THREE.Mesh) {
+      meshes.push(object);
+    }
+  }
+
+  const tiles: ModelTile3DConfig[] = [];
+
+  meshes.forEach((mesh) => {
+    // Set material to double-sided if requested
+    if (doubleSided && mesh.material) {
+      if (Array.isArray(mesh.material)) {
+        mesh.material.forEach((mat) => {
+          mat.side = THREE.DoubleSide;
+        });
+      } else {
+        mesh.material.side = THREE.DoubleSide;
+      }
+    }
+
+    // Generate tile ID: check userData.tileId first, then use prefix_meshname, or just meshname
+    const userTileId = mesh.userData.tileId as string | undefined;
+    const meshName = mesh.name || "mesh";
+    const tileId =
+      userTileId || (idPrefix ? `${idPrefix}_${meshName}` : meshName);
+
+    // Extract adjacency and weight from mesh userData
+    const adjacency = mesh.userData.adjacency || {};
+    const weight =
+      (mesh.userData.weight as number | undefined) ?? defaultWeight;
+
+    // Build the config
+    const config: ModelTile3DConfig = {
+      id: tileId,
+      model: () => mesh,
+      weight,
+      adjacency,
+    };
+
+    // Add optional transform properties if provided
+    if (baseRotation) {
+      config.rotation = baseRotation.clone();
+    }
+    if (basePosition) {
+      config.position = basePosition.clone();
+    }
+    if (baseScale) {
+      config.scale = baseScale.clone();
+    }
+
+    tiles.push(config);
+  });
+
+  return tiles;
+}

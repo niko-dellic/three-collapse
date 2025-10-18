@@ -1,8 +1,22 @@
 import * as THREE from "three";
 import { WorkerPool } from "../utils/WorkerPool";
 import { ModelTile3DConfig, WFC3DError } from "../wfc3d";
-import { prepareTilesForWorker } from "../utils";
+import {
+  DebugUI,
+  prepareTilesForWorker,
+  showProgress,
+  hideProgress,
+  setProgress,
+  setProgressColor,
+  validateTileset,
+  type DemoUIElements,
+} from "../utils";
 import { DebugGrid } from "../utils/DebugGrid";
+import {
+  InstancedModelRenderer,
+  type TileTransformOverride,
+} from "../renderers/InstancedModelRenderer";
+import { GLBTileLoader } from "../loaders/GLBTileLoader";
 
 /**
  * Configuration options for WFCGenerator
@@ -16,10 +30,28 @@ export interface WFCGeneratorOptions {
   autoExpansion?: boolean;
   /** Random seed for generation */
   seed?: number;
-  /** THREE.js scene for debug visualization */
-  scene?: THREE.Scene;
-  /** Cell size for debug grid (default: 1) */
+  /** THREE.js scene for rendering and debug visualization (required) */
+  scene: THREE.Scene;
+  /** Cell size for rendering and debug grid (default: 1) */
   cellSize?: number;
+  /** Initial grid width (default: 10) */
+  width?: number;
+  /** Initial grid height (default: 8) */
+  height?: number;
+  /** Initial grid depth (default: 10) */
+  depth?: number;
+  /** Debug mode (default: false) */
+  debug?: boolean;
+}
+
+/**
+ * Options for collapse calls
+ */
+export interface CollapseOptions {
+  /** Optional GLBTileLoader instance (will create one if not provided) */
+  loader?: GLBTileLoader;
+  /** Offset for centering the grid */
+  offset?: { x: number; y: number; z: number };
 }
 
 /**
@@ -81,7 +113,7 @@ type WorkerResponse =
   | ErrorMessage;
 
 /**
- * Main WFC Generator class - handles all worker management, generation, expansion, and retries
+ * Main WFC Generator class - handles all worker management, generation, expansion, retries, and rendering
  */
 export class WFCGenerator {
   private tiles: ModelTile3DConfig[];
@@ -90,7 +122,9 @@ export class WFCGenerator {
   private maxRetries: number;
   private currentSeed: number;
   private autoExpansion: boolean;
-  private debugGrid: DebugGrid | null = null;
+  private debugGrid: DebugGrid;
+  private renderer: InstancedModelRenderer | null = null;
+  private scene: THREE.Scene;
   private cellSize: number;
 
   // State for expansion
@@ -100,27 +134,132 @@ export class WFCGenerator {
   private currentHeight: number = 0;
   private currentDepth: number = 0;
 
+  // Collapse options for re-collapsing from UI
+  private lastLoader: GLBTileLoader | null = null;
+  private lastOffset: { x: number; y: number; z: number } | null = null;
+
+  // ui
+  private debugUI: DebugUI | null = null;
+
   /**
    * Create a new WFC Generator
    * @param tiles - Array of tile configurations
    * @param options - Generator options
    */
-  constructor(tiles: ModelTile3DConfig[], options: WFCGeneratorOptions = {}) {
+  constructor(tiles: ModelTile3DConfig[], options: WFCGeneratorOptions) {
     this.tiles = tiles;
+    this.scene = options.scene;
     this.maxRetries = options.maxRetries ?? 3;
     this.currentSeed = options.seed ?? Date.now();
     this.autoExpansion = options.autoExpansion ?? false;
     this.cellSize = options.cellSize ?? 1;
+
+    // Initialize default dimensions
+    this.currentWidth = options.width ?? 10;
+    this.currentHeight = options.height ?? 8;
+    this.currentDepth = options.depth ?? 10;
+
+    // Validate tileset
+    console.log("Validating tileset...");
+    const validation = validateTileset(this.tiles);
+    if (!validation.valid) {
+      console.warn("⚠️ Tileset validation found issues:");
+      for (const issue of validation.issues) {
+        const prefix = issue.severity === "error" ? "❌" : "⚠️";
+        console.warn(`${prefix} ${issue.message}`);
+      }
+    }
+    if (validation.suggestions.length > 0) {
+      console.log("💡 Suggestions:");
+      for (const suggestion of validation.suggestions) {
+        console.log(`  - ${suggestion}`);
+      }
+    }
+    if (validation.valid) {
+      console.log("✅ Tileset validation passed!");
+    }
+
+    if (options.debug) this.debugUI = new DebugUI(this);
 
     // Create worker pool
     const workerCount =
       options.workerCount ?? (navigator.hardwareConcurrency || 4);
     this.workerPool = new WorkerPool(workerCount);
 
-    // Create debug grid if scene is provided
-    if (options.scene) {
-      this.debugGrid = new DebugGrid(options.scene, this.cellSize);
+    // Create debug grid
+    this.debugGrid = new DebugGrid(this.scene, this.cellSize);
+  }
+
+  hideDebugUI(): void {
+    if (this.debugUI) this.debugUI.gui.hide();
+  }
+  showDebugUI(): void {
+    if (this.debugUI) this.debugUI.gui.show();
+    else this.debugUI = new DebugUI(this);
+  }
+
+  /**
+   * Get UI elements for internal progress updates
+   */
+  private getUI(): DemoUIElements | null {
+    if (!this.debugUI) return null;
+    return {
+      gui: this.debugUI.gui,
+      gridFolder: this.debugUI.gridFolder,
+      progressElement: this.debugUI.progressElement,
+      tilesetEditor: this.debugUI.tilesetEditor,
+    };
+  }
+
+  /**
+   * Collapse (solve) the WFC - loads models and generates the grid
+   * @param options - Collapse options including grid dimensions
+   * @returns Promise resolving to the generated 3D grid
+   */
+  async collapse(options: CollapseOptions): Promise<string[][][]> {
+    const ui = this.getUI();
+
+    // Use provided options or fall back to stored values
+    const loader = options.loader || this.lastLoader || new GLBTileLoader();
+    const offset = options.offset || this.lastOffset;
+
+    // Store options for future re-collapsing from UI
+    this.lastLoader = loader;
+    if (offset) this.lastOffset = offset;
+
+    // Clear existing renderer if re-generating
+    if (this.renderer) {
+      this.renderer.clear();
     }
+
+    // Load models if renderer doesn't exist yet
+    if (!this.renderer) {
+      showProgress(ui, "Loading GLB models...");
+      setProgress(ui, 0);
+
+      const modelData = await loader.loadTileset(this.tiles);
+
+      setProgress(ui, 10);
+
+      // Create renderer with loaded models
+      this.renderer = new InstancedModelRenderer(
+        this.scene,
+        modelData,
+        this.cellSize
+      );
+
+      // Set offset if provided
+      if (offset) {
+        this.renderer.setOffset(offset.x, offset.y, offset.z);
+      }
+    } else if (offset && this.renderer) {
+      // Update offset if provided and renderer exists
+      this.renderer.setOffset(offset.x, offset.y, offset.z);
+    }
+
+    // Generate the grid
+    const { width, height, depth } = this.getDimensions();
+    return await this.generate(width, height, depth);
   }
 
   /**
@@ -137,9 +276,14 @@ export class WFCGenerator {
     depth: number,
     options: GenerateOptions = {}
   ): Promise<string[][][]> {
+    const ui = this.getUI();
     const seed = options.seed ?? this.currentSeed;
     let attempt = 0;
     let lastError: Error | null = null;
+
+    // Show progress
+    showProgress(ui, "Running WFC algorithm...");
+    setProgress(ui, 0);
 
     // Store dimensions for expansion
     this.currentWidth = width;
@@ -166,8 +310,20 @@ export class WFCGenerator {
         }
 
         // Update debug grid
-        if (this.debugGrid) {
-          this.debugGrid.updateGrid(width, height, depth);
+        this.debugGrid.updateGrid(width, height, depth);
+
+        // Render the final result
+        if (this.renderer) {
+          this.renderer.render(result);
+
+          // Show completion
+          const stats = this.renderer.getStats();
+          showProgress(
+            ui,
+            `Complete! ${stats.totalInstances} instances, ${stats.tileTypes} types`
+          );
+          setProgress(ui, 100);
+          setTimeout(() => hideProgress(ui), 2000);
         }
 
         return result;
@@ -197,11 +353,19 @@ export class WFCGenerator {
     }
 
     // All retries exhausted
-    throw new Error(
-      `Generation failed after ${this.maxRetries} attempts: ${
-        lastError?.message || "Unknown error"
-      }`
-    );
+    const errorMessage = `Generation failed after ${
+      this.maxRetries
+    } attempts: ${lastError?.message || "Unknown error"}`;
+
+    showProgress(ui, `Failed: ${lastError?.message || "Unknown error"}`);
+    setProgress(ui, 0);
+    setProgressColor(ui, "#ef4444");
+    setTimeout(() => {
+      setProgressColor(ui, "var(--focus-color)");
+      hideProgress(ui);
+    }, 3000);
+
+    throw new Error(errorMessage);
   }
 
   /**
@@ -218,6 +382,8 @@ export class WFCGenerator {
     newDepth: number,
     options: ExpandOptions = {}
   ): Promise<string[][][]> {
+    const ui = this.getUI();
+
     if (!this.canExpand()) {
       throw new Error(
         "Cannot expand: no existing grid. Generate a grid first with autoExpansion enabled."
@@ -225,6 +391,10 @@ export class WFCGenerator {
     }
 
     const seed = options.seed ?? this.currentSeed;
+
+    // Show progress
+    showProgress(ui, "Expanding grid...");
+    setProgress(ui, 0);
 
     // Calculate expansion amounts
     const expansions = {
@@ -243,6 +413,7 @@ export class WFCGenerator {
       expansions.zMax === 0
     ) {
       // No expansion needed, just return current grid
+      hideProgress(ui);
       return this.lastGeneratedGrid!;
     }
 
@@ -269,13 +440,34 @@ export class WFCGenerator {
       );
 
       // Update debug grid
-      if (this.debugGrid) {
-        this.debugGrid.updateGrid(newWidth, newHeight, newDepth);
+      this.debugGrid.updateGrid(newWidth, newHeight, newDepth);
+
+      // Render the expanded result
+      if (this.renderer) {
+        this.renderer.render(result);
+
+        // Show completion
+        const stats = this.renderer.getStats();
+        showProgress(
+          ui,
+          `Complete! ${stats.totalInstances} instances, ${stats.tileTypes} types`
+        );
+        setProgress(ui, 100);
+        setTimeout(() => hideProgress(ui), 2000);
       }
 
       return result;
     } catch (error) {
       console.error("Expansion error:", error);
+
+      showProgress(ui, `Failed: ${(error as Error).message}`);
+      setProgress(ui, 0);
+      setProgressColor(ui, "#ef4444");
+      setTimeout(() => {
+        setProgressColor(ui, "var(--focus-color)");
+        hideProgress(ui);
+      }, 3000);
+
       throw error;
     }
   }
@@ -287,9 +479,24 @@ export class WFCGenerator {
    * @param newDepth - New grid depth
    * @returns The shrunk grid
    */
-  shrink(newWidth: number, newHeight: number, newDepth: number): string[][][] {
+  async shrink(
+    newWidth: number,
+    newHeight: number,
+    newDepth: number
+  ): Promise<string[][][]> {
     if (!this.canExpand()) {
       throw new Error("Cannot shrink: no existing grid");
+    }
+
+    // Validate dimensions
+    if (
+      newWidth > this.currentWidth ||
+      newHeight > this.currentHeight ||
+      newDepth > this.currentDepth
+    ) {
+      throw new Error(
+        "Cannot shrink to larger dimensions. Use expand() instead."
+      );
     }
 
     const shrunkGrid: string[][][] = [];
@@ -326,8 +533,11 @@ export class WFCGenerator {
     );
 
     // Update debug grid
-    if (this.debugGrid) {
-      this.debugGrid.updateGrid(newWidth, newHeight, newDepth);
+    this.debugGrid.updateGrid(newWidth, newHeight, newDepth);
+
+    // Render the shrunk result
+    if (this.renderer) {
+      this.renderer.render(shrunkGrid);
     }
 
     return shrunkGrid;
@@ -386,27 +596,75 @@ export class WFCGenerator {
   /**
    * Get the debug grid instance
    */
-  getDebugGrid(): DebugGrid | null {
+  getDebugGrid(): DebugGrid {
     return this.debugGrid;
+  }
+
+  /**
+   * Get the renderer instance (may be null if collapse() hasn't been called yet)
+   */
+  getRenderer(): InstancedModelRenderer | null {
+    return this.renderer;
   }
 
   /**
    * Set debug grid visibility
    */
   setDebugGridVisible(visible: boolean): void {
-    if (this.debugGrid) {
-      this.debugGrid.setVisible(visible);
+    this.debugGrid.setVisible(visible);
+  }
+
+  /**
+   * Get the current cell size
+   */
+  getCellSize(): number {
+    return this.cellSize;
+  }
+
+  /**
+   * Update cell size for both renderer and debug grid
+   */
+  setCellSize(cellSize: number): void {
+    this.cellSize = cellSize;
+    this.debugGrid.setCellSize(cellSize);
+
+    if (this.renderer) {
+      this.renderer.setCellSize(cellSize);
+
+      // Re-render with new cell size if we have a grid
+      if (this.lastGeneratedGrid) {
+        this.renderer.render(this.lastGeneratedGrid);
+      }
     }
   }
 
   /**
-   * Update cell size for the debug grid
+   * Update transform override for a specific tile type
    */
-  setCellSize(cellSize: number): void {
-    this.cellSize = cellSize;
-    if (this.debugGrid) {
-      this.debugGrid.setCellSize(cellSize);
+  updateTileTransform(tileId: string, transform: TileTransformOverride): void {
+    if (this.renderer) {
+      this.renderer.updateTileTransform(tileId, transform);
     }
+  }
+
+  /**
+   * Clear all tile transform overrides
+   */
+  clearTileTransforms(): void {
+    if (this.renderer) {
+      this.renderer.clearTransformOverrides();
+    }
+  }
+
+  /**
+   * Get current grid dimensions
+   */
+  getDimensions(): { width: number; height: number; depth: number } {
+    return {
+      width: this.currentWidth,
+      height: this.currentHeight,
+      depth: this.currentDepth,
+    };
   }
 
   /**
@@ -418,9 +676,9 @@ export class WFCGenerator {
       this.worker.terminate();
       this.worker = null;
     }
-    if (this.debugGrid) {
-      this.debugGrid.dispose();
-      this.debugGrid = null;
+    this.debugGrid.dispose();
+    if (this.renderer) {
+      this.renderer.clear();
     }
     this.reset();
   }
@@ -460,6 +718,11 @@ export class WFCGenerator {
         const message = e.data;
 
         if (message.type === "progress") {
+          // Update internal UI
+          const ui = this.getUI();
+          setProgress(ui, message.progress * 100);
+
+          // Call user callback
           if (options.onProgress) {
             options.onProgress(message.progress);
           }
@@ -477,6 +740,11 @@ export class WFCGenerator {
             z < depth
           ) {
             internalGrid[x][y][z] = tileId;
+          }
+
+          // Render tile in real-time
+          if (this.renderer) {
+            this.renderer.addTileInstance(tileId, x, y, z);
           }
 
           // Call user callback
@@ -568,6 +836,11 @@ export class WFCGenerator {
         const message = e.data;
 
         if (message.type === "progress") {
+          // Update internal UI
+          const ui = this.getUI();
+          setProgress(ui, message.progress * 100);
+
+          // Call user callback
           if (options.onProgress) {
             options.onProgress(message.progress);
           }
@@ -585,6 +858,11 @@ export class WFCGenerator {
             z < newDepth
           ) {
             internalGrid[x][y][z] = tileId;
+          }
+
+          // Render tile in real-time
+          if (this.renderer) {
+            this.renderer.addTileInstance(tileId, x, y, z);
           }
 
           // Call user callback

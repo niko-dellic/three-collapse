@@ -15,6 +15,8 @@ export {
   createBoxTile,
   createSphereTile,
   createCylinderTile,
+  gltfObjectToTiles,
+  type GLTFToTilesOptions,
 } from "./TileHelpers";
 
 export { WorkerPool, type WorkerTask, type WorkerResponse } from "./WorkerPool";
@@ -39,7 +41,6 @@ export {
 } from "./TilesetValidator";
 
 export {
-  createDebugUI as createDemoUI,
   DebugUI,
   showProgress,
   hideProgress,

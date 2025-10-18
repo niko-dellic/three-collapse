@@ -149,6 +149,7 @@ export class AdjacencyBuilderUI {
   private exportJsonBtn!: HTMLButtonElement;
   private exportGlbBtn!: HTMLButtonElement;
   private loadingOverlay!: HTMLDivElement;
+  private forceCompatibilityBtn!: HTMLButtonElement;
 
   constructor(config: AdjacencyBuilderConfig = {}) {
     this.config = config;
@@ -293,6 +294,12 @@ export class AdjacencyBuilderUI {
         <button id="manage-weights-btn">Manage Tile Weights</button>
         <div id="weights-panel" style="display: none; margin-top: 10px; max-height: 200px; overflow-y: auto"></div>
 
+        <h3>Quick Actions</h3>
+        <button id="force-compatibility-btn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; font-weight: bold;">✨ Force Compatibility (All Tiles)</button>
+        <div style="font-size: 10px; color: #94a3b8; margin-top: 5px">
+          Makes all tiles compatible with all other tiles in all directions
+        </div>
+
         <h3>Review & Export</h3>
         <div class="review-list" id="review-list"></div>
 
@@ -373,6 +380,9 @@ export class AdjacencyBuilderUI {
     this.exportGlbBtn = document.getElementById(
       "export-glb-btn"
     ) as HTMLButtonElement;
+    this.forceCompatibilityBtn = document.getElementById(
+      "force-compatibility-btn"
+    ) as HTMLButtonElement;
   }
 
   private setupEventListeners(): void {
@@ -450,6 +460,11 @@ export class AdjacencyBuilderUI {
     // Weight management
     this.manageWeightsBtn.addEventListener("click", () =>
       this.toggleWeightsPanel()
+    );
+
+    // Force Compatibility
+    this.forceCompatibilityBtn.addEventListener("click", () =>
+      this.handleForceCompatibility()
     );
 
     // Export
@@ -985,6 +1000,57 @@ export class AdjacencyBuilderUI {
     } else {
       this.checkCompletionAndCelebrate();
     }
+  }
+
+  /**
+   * Force Compatibility - Makes all tiles compatible with all other tiles in all directions
+   */
+  private handleForceCompatibility(): void {
+    // Confirm with user first
+    const confirmMessage =
+      `This will make ALL tiles compatible with ALL other tiles in ALL directions.\n\n` +
+      `Total tiles: ${this.tiles.size}\n` +
+      `Total pairs: ${this.allPairs.length}\n\n` +
+      `This action cannot be undone. Continue?`;
+
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    // For each tile, set empty adjacency (no restrictions = all compatible)
+    for (const tile of this.tiles.values()) {
+      // Empty sets mean no restrictions, all tiles are compatible
+      tile.adjacency.up = new Set();
+      tile.adjacency.down = new Set();
+      tile.adjacency.north = new Set();
+      tile.adjacency.south = new Set();
+      tile.adjacency.east = new Set();
+      tile.adjacency.west = new Set();
+    }
+
+    // Mark all pairs as reviewed
+    this.allPairs.forEach((pair) => {
+      this.reviewedPairs.add(this.getPairKey(pair.tileA, pair.tileB));
+    });
+
+    // Update UI
+    this.updateReviewList();
+    this.generatePairNavigation();
+    this.updatePairNavigationHighlight();
+
+    // Celebrate!
+    this.jsConfetti.addConfetti({
+      confettiColors: ["#667eea", "#764ba2", "#f093fb", "#4facfe"],
+      confettiRadius: 6,
+      confettiNumber: 500,
+    });
+
+    console.log(
+      `✨ Force Compatibility complete! All ${this.tiles.size} tiles are now compatible with each other.`
+    );
+    alert(
+      `✨ Success! All ${this.tiles.size} tiles are now compatible with all other tiles in all directions.`
+    );
   }
 
   private setAdjacency(

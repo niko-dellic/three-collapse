@@ -4,13 +4,12 @@
 import GUI from "lil-gui";
 import * as THREE from "three";
 import type { BaseTile3DConfig } from "../wfc3d/WFCTile3D";
+import type { WFCGenerator } from "../generators/WFCGenerator";
 import {
   createTilesetEditor,
   type TilesetEditorElements,
   type TileTransform,
 } from "./TilesetEditor";
-import type { DebugGrid } from "./DebugGrid";
-import type { InstancedModelRenderer } from "../renderers/InstancedModelRenderer";
 import debugUIStyles from "./debugUI.css?inline";
 
 /**
@@ -31,21 +30,16 @@ export interface DemoInstance {
   tiles: BaseTile3DConfig[];
   isLoading?: boolean;
 
-  // Mode properties
+  // Mode properties (these are read-only for the UI)
   expansionMode: boolean;
   useWorkers: boolean;
   workerCount: number;
 
-  // Renderer references
-  modelRenderer: InstancedModelRenderer | null;
+  // Generator access - single source of truth
+  getGenerator: () => WFCGenerator | null;
 
-  // Methods
-  generate?: (isExpansion?: boolean) => Promise<void>;
-  onCellSizeChange?: (cellSize: number) => void;
-  resetExpansionState?: () => void;
-  canExpand?: () => boolean;
-  shrinkGrid?: (width: number, height: number, depth: number) => Promise<void>;
-  getDebugGrid?: () => DebugGrid | null;
+  // Optional custom generation logic (if demo needs special handling)
+  onGenerate?: (isExpansion?: boolean) => Promise<void>;
 }
 
 /**
@@ -76,12 +70,23 @@ export class DebugUI {
   public gridFolder: GUI;
   public progressElement: HTMLDivElement;
   public tilesetEditor?: TilesetEditorElements;
+  public generator: WFCGenerator;
 
-  private demo: DemoInstance;
+  // Track UI state
+  private currentWidth: number = 10;
+  private currentHeight: number = 8;
+  private currentDepth: number = 10;
+
   private static stylesInjected = false;
 
-  constructor(demo: DemoInstance) {
-    this.demo = demo;
+  constructor(generator: WFCGenerator) {
+    this.generator = generator;
+
+    // Initialize with generator's current dimensions if available
+    const dims = this.generator.getDimensions();
+    if (dims.width > 0) this.currentWidth = dims.width;
+    if (dims.height > 0) this.currentHeight = dims.height;
+    if (dims.depth > 0) this.currentDepth = dims.depth;
 
     // Inject custom styles once
     if (!DebugUI.stylesInjected) {
@@ -129,75 +134,49 @@ export class DebugUI {
     dimension: "width" | "height" | "depth",
     value: number
   ): void {
-    this.demo[dimension] = value;
+    const previousWidth = this.currentWidth;
+    const previousHeight = this.currentHeight;
+    const previousDepth = this.currentDepth;
+
+    // Update internal state
+    if (dimension === "width") this.currentWidth = value;
+    if (dimension === "height") this.currentHeight = value;
+    if (dimension === "depth") this.currentDepth = value;
 
     // Handle auto-expand/shrink
-    if (
-      this.demo.expansionMode &&
-      this.demo.canExpand &&
-      this.demo.canExpand()
-    ) {
-      const widthIncreased = this.demo.width > this.demo.previousWidth;
-      const heightIncreased = this.demo.height > this.demo.previousHeight;
-      const depthIncreased = this.demo.depth > this.demo.previousDepth;
+    if (this.generator.canExpand()) {
+      const newWidth = this.currentWidth;
+      const newHeight = this.currentHeight;
+      const newDepth = this.currentDepth;
 
-      const widthDecreased = this.demo.width < this.demo.previousWidth;
-      const heightDecreased = this.demo.height < this.demo.previousHeight;
-      const depthDecreased = this.demo.depth < this.demo.previousDepth;
+      const widthIncreased = newWidth > previousWidth;
+      const heightIncreased = newHeight > previousHeight;
+      const depthIncreased = newDepth > previousDepth;
+
+      const widthDecreased = newWidth < previousWidth;
+      const heightDecreased = newHeight < previousHeight;
+      const depthDecreased = newDepth < previousDepth;
 
       const anySizeIncreased =
         widthIncreased || heightIncreased || depthIncreased;
       const anySizeDecreased =
         widthDecreased || heightDecreased || depthDecreased;
 
-      if (anySizeDecreased && !anySizeIncreased && this.demo.shrinkGrid) {
-        setTimeout(() => {
-          if (
-            this.demo.expansionMode &&
-            !this.demo.isLoading &&
-            this.demo.shrinkGrid
-          ) {
-            this.demo.shrinkGrid(
-              this.demo.width,
-              this.demo.height,
-              this.demo.depth
-            );
-          }
+      if (anySizeDecreased && !anySizeIncreased) {
+        setTimeout(async () => {
+          await this.generator.shrink(newWidth, newHeight, newDepth);
         }, 500);
       } else if (anySizeIncreased && !anySizeDecreased) {
-        setTimeout(() => {
-          if (
-            this.demo.expansionMode &&
-            !this.demo.isLoading &&
-            this.demo.generate
-          ) {
-            this.demo.generate(true);
-          }
-        }, 500);
-      } else if (anySizeIncreased && anySizeDecreased && this.demo.shrinkGrid) {
         setTimeout(async () => {
-          if (
-            this.demo.expansionMode &&
-            !this.demo.isLoading &&
-            this.demo.shrinkGrid
-          ) {
-            await this.demo.shrinkGrid(
-              this.demo.width,
-              this.demo.height,
-              this.demo.depth
-            );
-            if (this.demo.generate) {
-              await this.demo.generate(true);
-            }
-          }
+          await this.generator.expand(newWidth, newHeight, newDepth);
+        }, 500);
+      } else if (anySizeIncreased && anySizeDecreased) {
+        setTimeout(async () => {
+          await this.generator.shrink(newWidth, newHeight, newDepth);
+          await this.generator.expand(newWidth, newHeight, newDepth);
         }, 500);
       }
     }
-
-    // Update previous sizes
-    this.demo.previousWidth = this.demo.width;
-    this.demo.previousHeight = this.demo.height;
-    this.demo.previousDepth = this.demo.depth;
   }
 
   /**
@@ -207,9 +186,9 @@ export class DebugUI {
     const gridFolder = this.gui.addFolder("Grid Dimensions");
 
     const params = {
-      width: this.demo.width,
-      height: this.demo.height,
-      depth: this.demo.depth,
+      width: this.currentWidth,
+      height: this.currentHeight,
+      depth: this.currentDepth,
     };
 
     // Width control (default range: 5-30)
@@ -227,37 +206,32 @@ export class DebugUI {
       this.handleDimensionChange("depth", value);
     });
 
-    // Cell Size control (optional, default range: 0.1-10)
-    if (this.demo.cellSize !== undefined) {
-      const cellSizeParams = {
-        cellSize: this.demo.cellSize,
-      };
+    // Cell Size control (default range: 0.1-10)
+    const cellSizeParams = {
+      cellSize: this.generator.getCellSize(),
+    };
 
-      gridFolder
-        .add(cellSizeParams, "cellSize", 0.1, 10, 0.1)
-        .name("cell size")
-        .onChange((value: number) => {
-          if (this.demo.cellSize !== undefined) {
-            this.demo.cellSize = value;
-          }
-          if (this.demo.onCellSizeChange) {
-            this.demo.onCellSizeChange(value);
-          }
-        });
-    }
+    gridFolder
+      .add(cellSizeParams, "cellSize", 0.1, 10, 0.1)
+      .name("cell size")
+      .onChange((value: number) => {
+        this.generator.setCellSize(value);
+      });
 
     // Auto-expand mode control
     const expansionParams = {
-      autoExpand: this.demo.expansionMode,
+      autoExpand: (this.generator as any).autoExpansion || false,
     };
 
     gridFolder
       .add(expansionParams, "autoExpand")
       .name("Auto-expand Mode")
       .onChange((value: boolean) => {
-        this.demo.expansionMode = value;
-        if (!this.demo.expansionMode && this.demo.resetExpansionState) {
-          this.demo.resetExpansionState();
+        (this.generator as any).autoExpansion = value;
+
+        // Reset generator state when disabling expansion mode
+        if (!value) {
+          this.generator.reset();
         }
       });
 
@@ -270,16 +244,16 @@ export class DebugUI {
    */
   private createGenerationControls(): void {
     const params = {
-      seed: this.demo.currentSeed,
-      generate: () => {
-        if (this.demo.generate) {
-          this.demo.generate();
-        }
+      seed: this.generator.getSeed(),
+      generate: async () => {
+        // Use internal UI state for dimensions
+        await this.generator.collapse({});
       },
       randomSeed: () => {
-        this.demo.currentSeed = Date.now();
-        params.seed = this.demo.currentSeed;
+        const newSeed = Date.now();
+        params.seed = newSeed;
         seedController.updateDisplay();
+        this.generator.setSeed(newSeed);
       },
     };
 
@@ -287,7 +261,7 @@ export class DebugUI {
       .add(params, "seed")
       .name("Seed")
       .onChange((value: number) => {
-        this.demo.currentSeed = value;
+        this.generator.setSeed(value);
       });
 
     this.gui.add(params, "randomSeed").name("Random Seed");
@@ -301,16 +275,11 @@ export class DebugUI {
     const workerFolder = this.gui.addFolder("Workers");
 
     const workerParams = {
-      useWorkers: this.demo.useWorkers,
-      workerCount: this.demo.workerCount,
+      workerCount:
+        (this.generator as any).workerCount ||
+        navigator.hardwareConcurrency ||
+        4,
     };
-
-    workerFolder
-      .add(workerParams, "useWorkers")
-      .name("Enable Multi-worker")
-      .onChange((value: boolean) => {
-        this.demo.useWorkers = value;
-      });
 
     workerFolder
       .add(
@@ -322,7 +291,7 @@ export class DebugUI {
       )
       .name("Worker Count")
       .onChange((value: number) => {
-        this.demo.workerCount = value;
+        (this.generator as any).workerCount = value;
       });
   }
 
@@ -340,10 +309,7 @@ export class DebugUI {
       .add(debugParams, "wireframe")
       .name("Show Wireframe Grid")
       .onChange((value: boolean) => {
-        const debugGrid = this.demo.getDebugGrid?.();
-        if (debugGrid) {
-          debugGrid.setVisible(value);
-        }
+        this.generator.setDebugGridVisible(value);
       });
   }
 
@@ -352,28 +318,26 @@ export class DebugUI {
    */
   private createTilesetEditor(): TilesetEditorElements | undefined {
     return createTilesetEditor({
-      tiles: this.demo.tiles,
+      tiles: (this.generator as any).tiles || [],
       parentGUI: this.gui,
       onTransformChange: (tileId: string, transform: TileTransform) => {
-        if (this.demo.modelRenderer) {
-          this.demo.modelRenderer.updateTileTransform(tileId, {
-            position: new THREE.Vector3(
-              transform.position.x,
-              transform.position.y,
-              transform.position.z
-            ),
-            rotation: new THREE.Euler(
-              transform.rotation.x,
-              transform.rotation.y,
-              transform.rotation.z
-            ),
-            scale: new THREE.Vector3(
-              transform.scale.x,
-              transform.scale.y,
-              transform.scale.z
-            ),
-          });
-        }
+        this.generator.updateTileTransform(tileId, {
+          position: new THREE.Vector3(
+            transform.position.x,
+            transform.position.y,
+            transform.position.z
+          ),
+          rotation: new THREE.Euler(
+            transform.rotation.x,
+            transform.rotation.y,
+            transform.rotation.z
+          ),
+          scale: new THREE.Vector3(
+            transform.scale.x,
+            transform.scale.y,
+            transform.scale.z
+          ),
+        });
       },
     });
   }
@@ -406,26 +370,13 @@ export class DebugUI {
 }
 
 /**
- * Legacy function for backward compatibility
- */
-export function createDebugUI(demo: DemoInstance): DemoUIElements {
-  const debugUI = new DebugUI(demo);
-  return {
-    gui: debugUI.gui,
-    gridFolder: debugUI.gridFolder,
-    progressElement: debugUI.progressElement,
-    tilesetEditor: debugUI.tilesetEditor,
-  };
-}
-
-/**
  * Shows the progress bar with a message
  */
 export function showProgress(
-  elements: DemoUIElements,
+  elements: DemoUIElements | null,
   message: string = "Generating..."
 ): void {
-  if (elements.progressElement) {
+  if (elements?.progressElement) {
     elements.progressElement.style.display = "block";
     const label = elements.progressElement.querySelector(".progress-label");
     if (label) {
@@ -437,8 +388,8 @@ export function showProgress(
 /**
  * Hides the progress bar
  */
-export function hideProgress(elements: DemoUIElements): void {
-  if (elements.progressElement) {
+export function hideProgress(elements: DemoUIElements | null): void {
+  if (elements?.progressElement) {
     elements.progressElement.style.display = "none";
   }
 }
@@ -446,8 +397,11 @@ export function hideProgress(elements: DemoUIElements): void {
 /**
  * Updates the progress bar percentage
  */
-export function setProgress(elements: DemoUIElements, percent: number): void {
-  if (elements.progressElement) {
+export function setProgress(
+  elements: DemoUIElements | null,
+  percent: number
+): void {
+  if (elements?.progressElement) {
     const fill = elements.progressElement.querySelector(
       ".progress-fill"
     ) as HTMLElement;
@@ -461,10 +415,10 @@ export function setProgress(elements: DemoUIElements, percent: number): void {
  * Sets the progress bar color
  */
 export function setProgressColor(
-  elements: DemoUIElements,
+  elements: DemoUIElements | null,
   color: string
 ): void {
-  if (elements.progressElement) {
+  if (elements?.progressElement) {
     const fill = elements.progressElement.querySelector(
       ".progress-fill"
     ) as HTMLElement;

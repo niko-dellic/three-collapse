@@ -190,6 +190,116 @@ export class InstancedModelRenderer {
   }
 
   /**
+   * Add a single tile instance in real-time (for incremental rendering during generation)
+   */
+  addTileInstance(tileId: string, x: number, y: number, z: number): void {
+    // Get or create instance data array for this tile type
+    if (!this.instanceData.has(tileId)) {
+      this.instanceData.set(tileId, []);
+    }
+
+    const instances = this.instanceData.get(tileId)!;
+    instances.push({ tileId, x, y, z });
+
+    // Get or create instanced mesh
+    let instancedMesh = this.instancedMeshes.get(tileId);
+
+    if (!instancedMesh) {
+      // Create new instanced mesh with initial capacity
+      const modelData = this.modelData.get(tileId);
+      if (!modelData) {
+        console.warn(`No model data found for tile: ${tileId}`);
+        return;
+      }
+
+      // Start with reasonable capacity (will grow as needed)
+      const initialCapacity = 100;
+      instancedMesh = new THREE.InstancedMesh(
+        modelData.geometry,
+        modelData.material,
+        initialCapacity
+      );
+
+      instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      instancedMesh.castShadow = true;
+      instancedMesh.receiveShadow = true;
+
+      this.instancedMeshes.set(tileId, instancedMesh);
+      this.scene.add(instancedMesh);
+    }
+
+    // Check if we need to grow the instanced mesh
+    const needsGrow = instances.length > instancedMesh.count;
+    if (needsGrow) {
+      // Need to create a larger instanced mesh
+      const oldMesh = instancedMesh;
+      const newCapacity = Math.max(instancedMesh.count * 2, instances.length);
+
+      const modelData = this.modelData.get(tileId)!;
+      instancedMesh = new THREE.InstancedMesh(
+        modelData.geometry,
+        modelData.material,
+        newCapacity
+      );
+
+      instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      instancedMesh.castShadow = true;
+      instancedMesh.receiveShadow = true;
+
+      // Remove old mesh and add new one
+      this.scene.remove(oldMesh);
+      oldMesh.geometry.dispose();
+      this.scene.add(instancedMesh);
+      this.instancedMeshes.set(tileId, instancedMesh);
+    }
+
+    // If we grew the mesh, we need to re-render all instances
+    // Otherwise just update the newest one
+    const startIndex = needsGrow ? 0 : instances.length - 1;
+    const endIndex = instances.length;
+
+    const matrix = new THREE.Matrix4();
+    const position = new THREE.Vector3();
+    const rotation = new THREE.Quaternion();
+    const scale = new THREE.Vector3(1, 1, 1);
+
+    const modelData = this.modelData.get(tileId)!;
+    let tilePosition = modelData.position || new THREE.Vector3(0, 0, 0);
+    let tileRotation = modelData.rotation || new THREE.Euler(0, 0, 0);
+    let tileScale = modelData.scale || new THREE.Vector3(1, 1, 1);
+
+    // Apply overrides if they exist
+    const override = this.transformOverrides.get(tileId);
+    if (override) {
+      if (override.position) tilePosition = override.position;
+      if (override.rotation) tileRotation = override.rotation;
+      if (override.scale) tileScale = override.scale;
+    }
+
+    // Update matrices for all instances (if grew) or just the newest one
+    for (let i = startIndex; i < endIndex; i++) {
+      const instance = instances[i];
+
+      position.set(
+        instance.x * this.cellSize + tilePosition.x,
+        instance.y * this.cellSize + tilePosition.y,
+        instance.z * this.cellSize + tilePosition.z
+      );
+
+      rotation.setFromEuler(tileRotation);
+      scale.copy(tileScale);
+
+      matrix.compose(position, rotation, scale);
+      instancedMesh.setMatrixAt(i, matrix);
+    }
+
+    instancedMesh.instanceMatrix.needsUpdate = true;
+
+    // Update visible instance count
+    instancedMesh.count = instances.length;
+  }
+
+  /**
    * Update transform override for a specific tile type
    * This will immediately update all instances of that tile
    */
@@ -223,6 +333,22 @@ export class InstancedModelRenderer {
       // Recompute all matrices for this tile type
       this.updateInstanceMatrices(instancedMesh, tileId, instances);
       instancedMesh.instanceMatrix.needsUpdate = true;
+    }
+  }
+
+  /**
+   * Clear all transform overrides
+   */
+  clearTransformOverrides(): void {
+    this.transformOverrides.clear();
+
+    // Re-render all tiles with default transforms
+    for (const [tileId, instances] of this.instanceData.entries()) {
+      const instancedMesh = this.instancedMeshes.get(tileId);
+      if (instancedMesh && instances) {
+        this.updateInstanceMatrices(instancedMesh, tileId, instances);
+        instancedMesh.instanceMatrix.needsUpdate = true;
+      }
     }
   }
 
