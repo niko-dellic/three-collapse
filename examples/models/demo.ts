@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { WFCGenerator } from "../../src/generators/WFCGenerator";
-import { createScene } from "../../src/utils/SceneSetup";
+import { createScene } from "../SceneSetup";
 import { mixedModelTileset } from "../tiles/models/tileset";
 
 // Simple demo class for mixed models
@@ -36,7 +36,7 @@ class ModelsDemo {
     });
 
     // Initial collapse
-    await this.generator.collapse({});
+    await this.generator.collapse();
 
     console.log("Models demo initialized!");
   }

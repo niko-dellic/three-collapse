@@ -247,7 +247,7 @@ export class DebugUI {
       seed: this.generator.getSeed(),
       generate: async () => {
         // Use internal UI state for dimensions
-        await this.generator.collapse({});
+        await this.generator.collapse();
       },
       randomSeed: () => {
         const newSeed = Date.now();

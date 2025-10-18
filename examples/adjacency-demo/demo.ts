@@ -10,20 +10,19 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { ModelTile3DConfig } from "../../src/wfc3d";
-import { createScene } from "../../src/utils/SceneSetup";
+import { createScene, updateDirectionalLight } from "../SceneSetup";
 import { gltfObjectToTiles } from "../../src/utils";
 import { WFCGenerator } from "../../src/generators/WFCGenerator";
 
 /**
  * Load tiles from GLB folder with embedded adjacency data
  */
-async function loadTilesFromGLBFolder(
-  folderPath: string
-): Promise<ModelTile3DConfig[]> {
-  console.log(`🔍 Loading GLB files from: ${folderPath}`);
 
+async function loadTilesFromGLBFolder(): Promise<ModelTile3DConfig[]> {
   // Use import.meta.glob to discover all GLB files
-  const glbModules = import.meta.glob("/public/models/blocks/*.glb", {
+  // console.log(`${folderPath}/*.glb`);
+  // let path = `${folderPath}/*.glb`;
+  const glbModules = import.meta.glob("/public/models/blocksez/*.glb", {
     eager: false,
     query: "?url",
     import: "default",
@@ -96,9 +95,9 @@ async function loadTilesFromGLBFolder(
 
   try {
     // Load tiles from blocks folder with embedded adjacency data
-    const tiles = await loadTilesFromGLBFolder("./models/blocksez");
+    const tiles = await loadTilesFromGLBFolder();
 
-    const { scene } = createScene({
+    const { scene, lights } = createScene({
       backgroundColor: 0xff0000,
       fog: false,
       fogColor: 0x1a1a2e,
@@ -124,6 +123,9 @@ async function loadTilesFromGLBFolder(
     };
 
     const generator = new WFCGenerator(tiles, config);
+    generator.onComplete("update-lighting", () => {
+      updateDirectionalLight(scene, lights.directionalLight);
+    });
     // generator.collapse({
     //   offset: {
     //     x: (-config.width * config.cellSize) / 2,

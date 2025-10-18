@@ -16,7 +16,7 @@ export class DebugGrid {
     this.scene = scene;
     this.cellSize = cellSize;
     this.gridGroup = new THREE.Group();
-    this.gridGroup.name = "DebugGrid";
+    this.gridGroup.name = "debug_grid";
     this.gridGroup.visible = false;
     this.scene.add(this.gridGroup);
   }

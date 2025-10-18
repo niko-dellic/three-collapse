@@ -20,6 +20,7 @@ export interface ValidationResult {
 export function validateTileset(
   configs: ModelTile3DConfig[]
 ): ValidationResult {
+  console.log("Validating tileset...");
   const issues: ValidationIssue[] = [];
   const suggestions: string[] = [];
   const tiles = configs.map((config) => new WFCTile3D(config));
@@ -152,6 +153,21 @@ export function validateTileset(
   );
 
   const hasErrors = issues.some((i) => i.severity === "error");
+
+  if (hasErrors) {
+    console.warn("⚠️ Tileset validation found issues:");
+    for (const issue of issues) {
+      const prefix = issue.severity === "error" ? "❌" : "⚠️";
+      console.warn(`${prefix} ${issue.message}`);
+    }
+  }
+  if (suggestions.length > 0) {
+    console.log("💡 Suggestions:");
+    for (const suggestion of suggestions) {
+      console.log(`  - ${suggestion}`);
+    }
+  }
+  if (!hasErrors) console.log("✅ Tileset validation passed!");
 
   return {
     valid: !hasErrors,

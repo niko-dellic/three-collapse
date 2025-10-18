@@ -1204,7 +1204,7 @@ export class AdjacencyBuilderUI {
         ${
           adjacencies.length > 0
             ? adjacencies.join("<br/>")
-            : "<em>No adjacencies</em>"
+            : '<em style="color: #10b981;">✓ Fully compatible (no restrictions)</em>'
         }
       `;
 
@@ -1292,14 +1292,7 @@ export class AdjacencyBuilderUI {
         clone.userData = {
           tileId: tile.id,
           weight: tile.weight,
-          adjacency: {
-            up: Array.from(tile.adjacency.up),
-            down: Array.from(tile.adjacency.down),
-            north: Array.from(tile.adjacency.north),
-            south: Array.from(tile.adjacency.south),
-            east: Array.from(tile.adjacency.east),
-            west: Array.from(tile.adjacency.west),
-          },
+          adjacency: this.buildAdjacencyForExport(tile),
         };
 
         scene.add(clone);
@@ -1360,14 +1353,7 @@ export class AdjacencyBuilderUI {
         clone.userData = {
           tileId: tile.id,
           weight: tile.weight,
-          adjacency: {
-            up: Array.from(tile.adjacency.up),
-            down: Array.from(tile.adjacency.down),
-            north: Array.from(tile.adjacency.north),
-            south: Array.from(tile.adjacency.south),
-            east: Array.from(tile.adjacency.east),
-            west: Array.from(tile.adjacency.west),
-          },
+          adjacency: this.buildAdjacencyForExport(tile),
         };
 
         scene.add(clone);
@@ -1402,6 +1388,37 @@ export class AdjacencyBuilderUI {
     }
   }
 
+  /**
+   * Helper method to build adjacency object for export
+   * Returns {} if all directions are empty (meaning no restrictions)
+   */
+  private buildAdjacencyForExport(tile: TileData): any {
+    const adjacency: any = {};
+
+    // Only include directions that have items
+    if (tile.adjacency.up.size > 0) {
+      adjacency.up = Array.from(tile.adjacency.up);
+    }
+    if (tile.adjacency.down.size > 0) {
+      adjacency.down = Array.from(tile.adjacency.down);
+    }
+    if (tile.adjacency.north.size > 0) {
+      adjacency.north = Array.from(tile.adjacency.north);
+    }
+    if (tile.adjacency.south.size > 0) {
+      adjacency.south = Array.from(tile.adjacency.south);
+    }
+    if (tile.adjacency.east.size > 0) {
+      adjacency.east = Array.from(tile.adjacency.east);
+    }
+    if (tile.adjacency.west.size > 0) {
+      adjacency.west = Array.from(tile.adjacency.west);
+    }
+
+    // Return empty object if no restrictions (all tiles compatible)
+    return adjacency;
+  }
+
   private exportToJSON(): string {
     const configs: ModelTile3DConfig[] = [];
 
@@ -1411,37 +1428,8 @@ export class AdjacencyBuilderUI {
         weight: tile.weight,
         model:
           typeof tile.model === "string" ? tile.model : tile.model.toString(),
-        adjacency: {
-          up:
-            tile.adjacency.up.size > 0
-              ? Array.from(tile.adjacency.up)
-              : undefined,
-          down:
-            tile.adjacency.down.size > 0
-              ? Array.from(tile.adjacency.down)
-              : undefined,
-          north:
-            tile.adjacency.north.size > 0
-              ? Array.from(tile.adjacency.north)
-              : undefined,
-          south:
-            tile.adjacency.south.size > 0
-              ? Array.from(tile.adjacency.south)
-              : undefined,
-          east:
-            tile.adjacency.east.size > 0
-              ? Array.from(tile.adjacency.east)
-              : undefined,
-          west:
-            tile.adjacency.west.size > 0
-              ? Array.from(tile.adjacency.west)
-              : undefined,
-        },
+        adjacency: this.buildAdjacencyForExport(tile),
       };
-
-      if (Object.values(config.adjacency!).every((v) => v === undefined)) {
-        config.adjacency = {};
-      }
 
       configs.push(config);
     }

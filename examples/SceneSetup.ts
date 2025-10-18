@@ -47,6 +47,11 @@ export interface SceneSetupResult {
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
   controls: OrbitControls;
+  lights: {
+    ambientLight: THREE.AmbientLight;
+    directionalLight: THREE.DirectionalLight;
+    hemiLight: THREE.HemisphereLight;
+  };
 }
 
 /**
@@ -106,22 +111,7 @@ export function createScene(config: SceneConfig = {}): SceneSetupResult {
   }
 
   // Add lighting
-  addLighting(scene, {
-    ambient: { color: 0xffffff, intensity: 0.4 },
-    directional: {
-      color: 0xffffff,
-      intensity: 0.8,
-      position: { x: 20, y: 30, z: 20 },
-      castShadow: true,
-      shadowCamera: { left: -20, right: 20, top: 20, bottom: -20 },
-      shadowMapSize: 2048,
-    },
-    hemisphere: {
-      skyColor: 0x87ceeb,
-      groundColor: 0x8b4513,
-      intensity: 0.3,
-    },
-  });
+  const lights = addLighting(scene);
 
   // Handle window resize
   const resizeHandler = createResizeHandler(camera, renderer);
@@ -131,62 +121,51 @@ export function createScene(config: SceneConfig = {}): SceneSetupResult {
   const animate = createAnimationLoop(renderer, scene, camera, controls);
   animate();
 
-  return { scene, camera, renderer, controls };
+  return { scene, camera, renderer, controls, lights };
 }
 
 /**
  * Adds lighting to the scene based on configuration
  */
-export function addLighting(
-  scene: THREE.Scene,
-  config: LightConfig = {}
-): void {
-  const { ambient = {}, directional = {}, hemisphere } = config;
-
+export function addLighting(scene: THREE.Scene): {
+  ambientLight: THREE.AmbientLight;
+  directionalLight: THREE.DirectionalLight;
+  hemiLight: THREE.HemisphereLight;
+} {
   // Ambient light
-  if (ambient !== null) {
-    const ambientLight = new THREE.AmbientLight(
-      ambient.color ?? 0xffffff,
-      ambient.intensity ?? 0.6
-    );
-    scene.add(ambientLight);
-  }
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+  scene.add(ambientLight);
 
   // Directional light
-  if (directional !== null) {
-    const directionalLight = new THREE.DirectionalLight(
-      directional.color ?? 0xffffff,
-      directional.intensity ?? 0.6
-    );
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
 
-    const pos = directional.position ?? { x: 10, y: 20, z: 10 };
-    directionalLight.position.set(pos.x, pos.y, pos.z);
+  directionalLight.position.set(20, 30, 20);
+  directionalLight.castShadow = true;
+  directionalLight.shadow.camera.left = -50;
+  directionalLight.shadow.camera.right = 50;
+  directionalLight.shadow.camera.top = 50;
+  directionalLight.shadow.camera.bottom = -50;
 
-    if (directional.castShadow) {
-      directionalLight.castShadow = true;
-      const shadowCam = directional.shadowCamera ?? {};
-      directionalLight.shadow.camera.left = shadowCam.left ?? -20;
-      directionalLight.shadow.camera.right = shadowCam.right ?? 20;
-      directionalLight.shadow.camera.top = shadowCam.top ?? 20;
-      directionalLight.shadow.camera.bottom = shadowCam.bottom ?? -20;
+  const shadowMapSize = 2048;
+  directionalLight.shadow.mapSize.width = shadowMapSize;
+  directionalLight.shadow.mapSize.height = shadowMapSize;
+  scene.add(directionalLight);
 
-      const shadowMapSize = directional.shadowMapSize ?? 2048;
-      directionalLight.shadow.mapSize.width = shadowMapSize;
-      directionalLight.shadow.mapSize.height = shadowMapSize;
-    }
-
-    scene.add(directionalLight);
-  }
+  const directionalLightHelper = new THREE.DirectionalLightHelper(
+    directionalLight,
+    1
+  );
+  scene.add(directionalLightHelper);
 
   // Hemisphere light
-  if (hemisphere) {
-    const hemiLight = new THREE.HemisphereLight(
-      hemisphere.skyColor ?? 0x87ceeb,
-      hemisphere.groundColor ?? 0x8b4513,
-      hemisphere.intensity ?? 0.3
-    );
-    scene.add(hemiLight);
-  }
+  const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x8b4513, 0.3);
+  scene.add(hemiLight);
+
+  return {
+    ambientLight: ambientLight,
+    directionalLight: directionalLight,
+    hemiLight: hemiLight,
+  };
 }
 
 /**
@@ -218,4 +197,12 @@ export function createAnimationLoop(
     renderer.render(scene, camera);
   };
   return animate;
+}
+
+export function updateDirectionalLight(
+  scene: THREE.Scene,
+  directionalLight: THREE.DirectionalLight
+): void {
+  const box = new THREE.Box3().setFromObject(scene);
+  directionalLight.position.set(box.max.x, box.max.y, box.max.z);
 }

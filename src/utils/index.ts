@@ -6,7 +6,7 @@ export {
   type SceneConfig,
   type LightConfig,
   type SceneSetupResult,
-} from "./SceneSetup";
+} from "../../examples/SceneSetup";
 
 export {
   validateTileAdjacency,
