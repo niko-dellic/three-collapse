@@ -11,6 +11,7 @@ export class InstancedModelRenderer {
   private modelData: Map<string, LoadedModelData> | null = null;
   private cellSize: number;
   private transformOverrides: Map<string, TileTransformOverride>; // Per-tile transform overrides
+  private renderedPositions: Map<string, string>; // Track which tile is at each position (key: "x,y,z", value: tileId)
 
   constructor(scene: THREE.Scene, cellSize: number = 1) {
     this.scene = scene;
@@ -18,6 +19,7 @@ export class InstancedModelRenderer {
     this.instancedMeshes = new Map();
     this.instanceData = new Map();
     this.transformOverrides = new Map();
+    this.renderedPositions = new Map();
   }
 
   updateTileset(modelData: Map<string, LoadedModelData>): void {
@@ -163,6 +165,7 @@ export class InstancedModelRenderer {
     }
     this.instancedMeshes.clear();
     this.instanceData.clear();
+    this.renderedPositions.clear(); // Clear position tracking
   }
 
   /**
@@ -226,6 +229,26 @@ export class InstancedModelRenderer {
    * Add a single tile instance in real-time (for incremental rendering during generation)
    */
   addTileInstance(tileId: string, x: number, y: number, z: number): void {
+    const positionKey = this.coordToKey(x, y, z);
+
+    // Safeguard: Check if a tile already exists at this position
+    const existingTileId = this.renderedPositions.get(positionKey);
+    if (existingTileId) {
+      if (existingTileId === tileId) {
+        // Same tile type at same position - skip silently
+        return;
+      } else {
+        // Different tile type at same position - warn and skip
+        console.warn(
+          `Attempted to render tile "${tileId}" at position (${x}, ${y}, ${z}) but "${existingTileId}" is already there. Skipping duplicate.`
+        );
+        return;
+      }
+    }
+
+    // Track this position as rendered
+    this.renderedPositions.set(positionKey, tileId);
+
     // Get or create instance data array for this tile type
     if (!this.instanceData.has(tileId)) {
       this.instanceData.set(tileId, []);

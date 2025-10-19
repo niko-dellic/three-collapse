@@ -30,6 +30,8 @@ export class DebugUI {
     cellZ: Controller;
     updateLimits: () => void;
   } | null = null;
+  private dimensionChangeTimeout: ReturnType<typeof setTimeout> | null = null;
+  private isExpandInProgress: boolean = false;
 
   constructor(generator: WFCGenerator, container: HTMLElement = document.body) {
     this.generator = generator;
@@ -76,24 +78,47 @@ export class DebugUI {
 
   /**
    * Helper to handle dimension changes with auto-expand logic
+   * Uses debouncing to prevent rapid expand requests
    */
   private async handleDimensionChange(
     _dimension: "width" | "height" | "depth",
     _value: number
   ): Promise<void> {
-    // Update local expansion slider limits
+    // Update local expansion slider limits immediately
     if (this.localExpansionControllers)
       this.localExpansionControllers.updateLimits();
 
-    // Handle auto-expand/shrink
-    if (this.generator.canExpand()) {
-      const newDimensions = this.generator.getDimensions();
-
-      const { width, height, depth } = newDimensions;
-      console.log("width", width);
-      await this.generator.expand(width, height, depth);
-      // await this.generator.shrink(width, height, depth);
+    // Cancel any pending dimension change operation
+    if (this.dimensionChangeTimeout) {
+      clearTimeout(this.dimensionChangeTimeout);
+      this.dimensionChangeTimeout = null;
     }
+
+    // Debounce the expand operation (wait 500ms after last change)
+    this.dimensionChangeTimeout = setTimeout(async () => {
+      // Don't proceed if an expand is already in progress
+      if (this.isExpandInProgress) {
+        console.log("Expand already in progress, skipping dimension change");
+        return;
+      }
+
+      // Handle auto-expand/shrink
+      if (this.generator.canExpand()) {
+        const newDimensions = this.generator.getDimensions();
+        const { width, height, depth } = newDimensions;
+
+        try {
+          this.isExpandInProgress = true;
+          console.log(`Auto-expanding to ${width}x${height}x${depth}...`);
+          await this.generator.expand(width, height, depth);
+          console.log("Auto-expand complete");
+        } catch (error) {
+          console.error("Auto-expand failed:", error);
+        } finally {
+          this.isExpandInProgress = false;
+        }
+      }
+    }, 500); // 500ms debounce delay
   }
 
   /**

@@ -94,19 +94,7 @@ async function loadTilesFromGLBFolder(): Promise<ModelTile3DConfig[]> {
     // Load tiles from blocks folder with embedded adjacency data
     const tiles = await loadTilesFromGLBFolder();
 
-    const { scene, lights } = createScene({
-      backgroundColor: 0xff0000,
-      fog: false,
-      fogColor: 0x1a1a2e,
-      fogNear: 15,
-      fogFar: 40,
-      cameraPosition: { x: 15, y: 12, z: 15 },
-      enableShadows: true,
-      maxPolarAngle: Math.PI / 2,
-    });
-
     const config = {
-      scene,
       maxRetries: 3,
       autoExpansion: true,
       useWorkers: true,
@@ -119,9 +107,42 @@ async function loadTilesFromGLBFolder(): Promise<ModelTile3DConfig[]> {
       debug: true,
     };
 
-    const generator = new WFCGenerator(tiles, config);
+    const { scene, lights, gridLights } = createScene({
+      backgroundColor: 0xff0000,
+      fog: false,
+      fogColor: 0x1a1a2e,
+      fogNear: 15,
+      fogFar: 40,
+      cameraPosition: { x: 15, y: 12, z: 15 },
+      enableShadows: true,
+      maxPolarAngle: Math.PI / 2,
+      gridLights: {
+        enabled: true,
+        width: config.width,
+        height: config.height,
+        depth: config.depth,
+        cellSize: config.cellSize,
+        colors: [0xff7f00, 0x00ff7f, 0x7f00ff],
+        intensity: 8,
+        distance: 15,
+        showHelpers: false,
+      },
+    });
+
+    const generator = new WFCGenerator(tiles, { scene, ...config });
     generator.onComplete("update-lighting", () => {
       updateDirectionalLight(scene, lights.directionalLight);
+    });
+    generator.onComplete("update-grid-lights", () => {
+      if (gridLights) {
+        const dimensions = generator.getDimensions();
+        gridLights.updateGrid(
+          dimensions.width,
+          dimensions.height,
+          dimensions.depth,
+          generator.getCellSize()
+        );
+      }
     });
     // generator.collapse({
     //   offset: {
