@@ -27,21 +27,21 @@ export class InstancedModelRenderer {
   /**
    * Render the collapsed WFC grid using instanced meshes
    */
-  render(collapsedGrid: string[][][]): void {
+  render(grid: string[][][]): void {
     // Clear existing instances
     this.clear();
 
     // Count instances per tile type
     const instanceCounts = new Map<string, TileInstance[]>();
 
-    const width = collapsedGrid.length;
-    const height = collapsedGrid[0]?.length || 0;
-    const depth = collapsedGrid[0]?.[0]?.length || 0;
+    const width = grid.length;
+    const height = grid[0]?.length || 0;
+    const depth = grid[0]?.[0]?.length || 0;
 
     for (let x = 0; x < width; x++) {
       for (let y = 0; y < height; y++) {
         for (let z = 0; z < depth; z++) {
-          const tileId = collapsedGrid[x][y][z];
+          const tileId = grid[x][y][z];
 
           if (!tileId) continue;
 

@@ -79,30 +79,18 @@ export class WFCGenerator {
   }
 
   /**
-   * Collapse (solve) the WFC - loads models and generates the grid
-   * @param options - Collapse options including grid dimensions
-   * @returns Promise resolving to the generated 3D grid
-   */
-  async collapse(): Promise<string[][][]> {
-    // Load models if renderer doesn't exist yet
-    this.debugUI?.showProgress("Loading GLB models...");
-    this.debugUI?.setProgress(0);
-    const modelData = await this.loader.loadTileset(this.tiles);
-    this.renderer.updateTileset(modelData);
-    this.debugUI?.setProgress(10);
-    return await this.generate();
-  }
-
-  /**
    * Generate a new WFC grid
-   * @param width - Grid width
-   * @param height - Grid height
-   * @param depth - Grid depth
    * @param options - Generation options
    * @returns Promise resolving to the generated 3D grid
    */
   async generate(options: GenerateOptions = {}): Promise<string[][][]> {
     const { width, height, depth } = this.getDimensions();
+
+    this.debugUI?.showProgress("Loading GLB models...");
+    this.debugUI?.setProgress(0);
+    const modelData = await this.loader.loadTileset(this.tiles);
+    this.renderer.updateTileset(modelData);
+    this.debugUI?.setProgress(10);
 
     const seed = options.seed ?? this.seed;
     let attempt = 0;
@@ -140,17 +128,15 @@ export class WFCGenerator {
         if (this.debugGrid) this.debugGrid.updateGrid(width, height, depth);
 
         // Render the final result
-        if (this.renderer) {
-          this.renderer.render(result);
+        this.renderer.render(result);
 
-          // Show completion
-          const stats = this.renderer.getStats();
-          this.debugUI?.showProgress(
-            `Complete! ${stats.totalInstances} instances, ${stats.tileTypes} types`
-          );
-          this.debugUI?.setProgress(100);
-          setTimeout(() => this.debugUI?.hideProgress(), 2000);
-        }
+        // Show completion
+        const stats = this.renderer.getStats();
+        this.debugUI?.showProgress(
+          `Complete! ${stats.totalInstances} instances, ${stats.tileTypes} types`
+        );
+        this.debugUI?.setProgress(100);
+        setTimeout(() => this.debugUI?.hideProgress(), 2000);
 
         // Trigger completion callbacks
         this.triggerCompleteCallbacks();

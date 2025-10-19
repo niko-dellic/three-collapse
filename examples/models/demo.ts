@@ -36,7 +36,7 @@ class ModelsDemo {
     });
 
     // Initial collapse
-    await this.generator.collapse();
+    await this.generator.generate();
 
     console.log("Models demo initialized!");
   }
