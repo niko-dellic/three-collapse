@@ -117,9 +117,8 @@ export class InstancedModelRenderer {
    */
   getStats(): { tileTypes: number; totalInstances: number } {
     let totalInstances = 0;
-    for (const mesh of this.instancedMeshes.values()) {
+    for (const mesh of this.instancedMeshes.values())
       totalInstances += mesh.count;
-    }
 
     return {
       tileTypes: this.instancedMeshes.size,

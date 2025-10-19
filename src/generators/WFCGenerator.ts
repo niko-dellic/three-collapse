@@ -24,7 +24,6 @@ export class WFCGenerator {
   private worker: Worker | null = null;
   private maxRetries: number = 3;
   private seed: number = Date.now();
-  private autoExpansion: boolean = false;
   private debugGrid: DebugGrid | null = null;
   private renderer: InstancedModelRenderer;
   private scene: THREE.Scene;
@@ -32,7 +31,6 @@ export class WFCGenerator {
 
   // State for expansion
   private grid: string[][][] | null = null;
-  private buffer: SerializedBuffer | null = null;
   private width: number = 8;
   private height: number = 1;
   private depth: number = 8;
@@ -56,7 +54,6 @@ export class WFCGenerator {
     this.scene = options.scene;
     if (options.maxRetries) this.maxRetries = options.maxRetries;
     if (options.seed) this.seed = options.seed;
-    if (options.autoExpansion) this.autoExpansion = options.autoExpansion;
     if (options.width) this.width = options.width;
     if (options.height) this.height = options.height;
     if (options.depth) this.depth = options.depth;
@@ -119,10 +116,7 @@ export class WFCGenerator {
         );
 
         // Store for expansion if enabled
-        if (this.autoExpansion) {
-          this.grid = result;
-          this.buffer = this.serializeBuffer(result, width, height, depth);
-        }
+        this.grid = result;
 
         // Update debug grid
         if (this.debugGrid) this.debugGrid.updateGrid(width, height, depth);
@@ -244,7 +238,12 @@ export class WFCGenerator {
       options,
       {
         type: "expand",
-        existingBuffer: this.buffer,
+        existingBuffer: this.serializeBuffer(
+          this.grid!,
+          this.width,
+          this.height,
+          this.depth
+        ),
         expansions,
         tiles: prepareTilesForWorker(this.tiles),
         seed,
@@ -471,7 +470,6 @@ export class WFCGenerator {
       this.height = newHeight;
       this.depth = newDepth;
       this.grid = result;
-      this.buffer = this.serializeBuffer(result, newWidth, newHeight, newDepth);
 
       // Update debug grid
       if (this.debugGrid)
@@ -553,12 +551,6 @@ export class WFCGenerator {
     this.height = newHeight;
     this.depth = newDepth;
     this.grid = shrunkGrid;
-    this.buffer = this.serializeBuffer(
-      shrunkGrid,
-      newWidth,
-      newHeight,
-      newDepth
-    );
 
     // Update debug grid
     if (this.debugGrid)
@@ -573,7 +565,7 @@ export class WFCGenerator {
    * Check if expansion is possible
    */
   canExpand(): boolean {
-    return this.grid !== null && this.buffer !== null;
+    return this.grid !== null;
   }
 
   /**
@@ -581,7 +573,6 @@ export class WFCGenerator {
    */
   reset(): void {
     this.grid = null;
-    this.buffer = null;
     this.renderer.clear();
   }
 
