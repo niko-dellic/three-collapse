@@ -1,14 +1,4 @@
 export {
-  createScene,
-  addLighting,
-  createResizeHandler,
-  createAnimationLoop,
-  type SceneConfig,
-  type LightConfig,
-  type SceneSetupResult,
-} from "../../examples/SceneSetup";
-
-export {
   validateTileAdjacency,
   prepareTilesForWorker,
   createAirTile,
