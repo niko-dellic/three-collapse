@@ -137,7 +137,7 @@ export function addLighting(scene: THREE.Scene): {
   scene.add(ambientLight);
 
   // Directional light
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
 
   directionalLight.position.set(20, 30, 20);
   directionalLight.castShadow = true;

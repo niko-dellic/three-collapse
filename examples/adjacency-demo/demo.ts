@@ -19,9 +19,6 @@ import { WFCGenerator } from "../../src/generators/WFCGenerator";
  */
 
 async function loadTilesFromGLBFolder(): Promise<ModelTile3DConfig[]> {
-  // Use import.meta.glob to discover all GLB files
-  // console.log(`${folderPath}/*.glb`);
-  // let path = `${folderPath}/*.glb`;
   const glbModules = import.meta.glob("/public/models/blocksez/*.glb", {
     eager: false,
     query: "?url",

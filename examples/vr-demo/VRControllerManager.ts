@@ -28,9 +28,6 @@ export interface ControllerCallbacks {
  * Manages VR controllers, input handling, and visual feedback
  */
 export class VRControllerManager {
-  private scene: THREE.Scene;
-  private renderer: THREE.WebGLRenderer;
-  private camera: THREE.Camera;
   private cellSize: number;
 
   // Controllers
@@ -58,20 +55,15 @@ export class VRControllerManager {
   private callbacks: ControllerCallbacks;
 
   // Input state
-  private rightTriggerPressed: boolean = false;
-  private leftTriggerPressed: boolean = false;
   private isGenerating: boolean = false;
 
   constructor(
     scene: THREE.Scene,
     renderer: THREE.WebGLRenderer,
-    camera: THREE.Camera,
+    _camera: THREE.Camera,
     cellSize: number = 2,
     callbacks: ControllerCallbacks = {}
   ) {
-    this.scene = scene;
-    this.renderer = renderer;
-    this.camera = camera;
     this.cellSize = cellSize;
     this.callbacks = callbacks;
 
@@ -155,7 +147,7 @@ export class VRControllerManager {
    * Create teleport curve visualization
    */
   private createTeleportCurve(): THREE.Line {
-    const points = [];
+    const points: THREE.Vector3[] = [];
     for (let i = 0; i <= 20; i++) {
       points.push(new THREE.Vector3(0, 0, 0));
     }
@@ -173,37 +165,27 @@ export class VRControllerManager {
    */
   private setupEventListeners(): void {
     // Right controller (Create)
-    this.controller1.addEventListener("selectstart", () => {
+    this.controller1.addEventListener("selectstart" as any, () => {
       if (this.mode === "edit" && !this.isGenerating) {
-        this.rightTriggerPressed = true;
         this.handleRightTrigger();
       } else if (this.mode === "locomotion") {
         this.handleTeleport();
       }
     });
 
-    this.controller1.addEventListener("selectend", () => {
-      this.rightTriggerPressed = false;
-    });
-
     // Left controller (Delete)
-    this.controller2.addEventListener("selectstart", () => {
+    this.controller2.addEventListener("selectstart" as any, () => {
       if (this.mode === "edit" && !this.isGenerating) {
-        this.leftTriggerPressed = true;
         this.handleLeftTrigger();
       }
     });
 
-    this.controller2.addEventListener("selectend", () => {
-      this.leftTriggerPressed = false;
-    });
-
     // Mode toggle (squeeze/grip buttons)
-    this.controller1.addEventListener("squeezestart", () => {
+    this.controller1.addEventListener("squeezestart" as any, () => {
       this.toggleMode();
     });
 
-    this.controller2.addEventListener("squeezestart", () => {
+    this.controller2.addEventListener("squeezestart" as any, () => {
       this.toggleMode();
     });
   }

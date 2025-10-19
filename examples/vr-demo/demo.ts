@@ -16,9 +16,12 @@ import { WFCGenerator } from "../../src/generators/WFCGenerator";
 import { createVRScene, createReferenceMarkers } from "./VRSceneSetup";
 import { VRControllerManager } from "./VRControllerManager";
 
+const cellSize = 0.05;
+
 /**
  * Load tiles from GLB folder with embedded adjacency data
  */
+
 async function loadTilesFromGLBFolder(): Promise<ModelTile3DConfig[]> {
   const glbModules = import.meta.glob("/public/models/blocksez/*.glb", {
     eager: false,
@@ -51,6 +54,7 @@ async function loadTilesFromGLBFolder(): Promise<ModelTile3DConfig[]> {
       const tileMeshes = gltfObjectToTiles(gltf.scene, {
         idPrefix: filenameWithoutExt,
         baseRotation: new THREE.Euler(Math.PI / 2, 0, 0),
+        baseScale: new THREE.Vector3(cellSize, cellSize, cellSize),
         recursive: true,
         doubleSided: true,
       });
@@ -120,7 +124,7 @@ async function loadTilesFromGLBFolder(): Promise<ModelTile3DConfig[]> {
       autoExpansion: true,
       workerCount: navigator.hardwareConcurrency || 4,
       seed: Date.now(),
-      cellSize: 2,
+      cellSize: cellSize,
       width: 5,
       height: 3,
       depth: 5,
@@ -205,11 +209,7 @@ async function loadTilesFromGLBFolder(): Promise<ModelTile3DConfig[]> {
     console.log("Controller manager initialized");
 
     // Animation loop
-    let lastTime = 0;
-    renderer.setAnimationLoop((time) => {
-      const deltaTime = time - lastTime;
-      lastTime = time;
-
+    renderer.setAnimationLoop(() => {
       // Update controller manager
       controllerManager.update();
 

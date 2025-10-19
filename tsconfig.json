@@ -28,6 +28,6 @@
     "examples/models/demo.ts",
     "examples/adjacency-builder/demo.ts",
     "examples/adjacency-demo/demo.ts",
-    "examples/SceneSetup.ts"
+    "examples/vr-demo/demo.ts"
   ]
 }
