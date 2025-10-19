@@ -57,8 +57,7 @@ export class WFC3D {
     onTileCollapse?: (x: number, y: number, z: number, tileId: string) => void
   ): Promise<boolean> {
     this.lastError = null; // Clear previous errors
-    const totalCells =
-      this.buffer.width * this.buffer.height * this.buffer.depth;
+    const totalCells = this.buffer.cells.size;
     let collapsedCells = 0;
 
     while (!this.buffer.isComplete()) {
@@ -83,7 +82,7 @@ export class WFC3D {
       // Collapse the cell
       const tileId = this.selectTile(x, y, z);
       if (!tileId) {
-        const cell = this.buffer.cells[x][y][z];
+        const cell = this.buffer.getCell(x, y, z);
         this.lastError = {
           type: "no_valid_tile",
           message: `No valid tile found for cell at (${x}, ${y}, ${z})`,
@@ -91,13 +90,18 @@ export class WFC3D {
           progress: collapsedCells / totalCells,
           cellsCollapsed: collapsedCells,
           totalCells,
-          details: `Cell has ${cell.possibleTiles.size} possible tiles but couldn't select one`,
+          details: `Cell has ${
+            cell?.possibleTiles.size || 0
+          } possible tiles but couldn't select one`,
         };
         return false; // No valid tile found
       }
 
-      this.buffer.cells[x][y][z].collapse(tileId);
-      collapsedCells++;
+      const cell = this.buffer.getCell(x, y, z);
+      if (cell) {
+        cell.collapse(tileId);
+        collapsedCells++;
+      }
 
       // Notify tile collapse callback
       if (onTileCollapse) {
@@ -141,25 +145,21 @@ export class WFC3D {
     let minEntropy = Infinity;
     const candidates: [number, number, number][] = [];
 
-    for (let x = 0; x < this.buffer.width; x++) {
-      for (let y = 0; y < this.buffer.height; y++) {
-        for (let z = 0; z < this.buffer.depth; z++) {
-          const cell = this.buffer.cells[x][y][z];
+    for (const [key, cell] of this.buffer.cells.entries()) {
+      if (cell.collapsed) continue;
 
-          if (cell.collapsed) continue;
+      const entropy = cell.entropy;
 
-          const entropy = cell.entropy;
+      if (entropy === 0) continue; // Skip impossible cells
 
-          if (entropy === 0) continue; // Skip impossible cells
-
-          if (entropy < minEntropy) {
-            minEntropy = entropy;
-            candidates.length = 0;
-            candidates.push([x, y, z]);
-          } else if (entropy === minEntropy) {
-            candidates.push([x, y, z]);
-          }
-        }
+      if (entropy < minEntropy) {
+        minEntropy = entropy;
+        candidates.length = 0;
+        const [x, y, z] = this.buffer.keyToCoord(key);
+        candidates.push([x, y, z]);
+      } else if (entropy === minEntropy) {
+        const [x, y, z] = this.buffer.keyToCoord(key);
+        candidates.push([x, y, z]);
       }
     }
 
@@ -174,7 +174,9 @@ export class WFC3D {
    * Select a tile for a cell based on weights
    */
   private selectTile(x: number, y: number, z: number): string | null {
-    const cell = this.buffer.cells[x][y][z];
+    const cell = this.buffer.getCell(x, y, z);
+    if (!cell) return null;
+
     const possibleTileIds = Array.from(cell.possibleTiles);
 
     if (possibleTileIds.length === 0) return null;
@@ -212,7 +214,8 @@ export class WFC3D {
     while (stack.length > 0) {
       const coords = stack.pop()!;
       const [x, y, z] = coords;
-      const cell = this.buffer.cells[x][y][z];
+      const cell = this.buffer.getCell(x, y, z);
+      if (!cell) continue;
 
       // Check all 6 directions
       for (let dir = 0; dir < 6; dir++) {
@@ -309,44 +312,41 @@ export class WFC3D {
     const constraintStack: [number, number, number][] = [];
 
     // Check all cells in old buffer region for edges that touch new cells
-    for (let x = 0; x < oldBuffer.width; x++) {
-      for (let y = 0; y < oldBuffer.height; y++) {
-        for (let z = 0; z < oldBuffer.depth; z++) {
-          const oldCell = oldBuffer.cells[x][y][z];
-          if (!oldCell.collapsed) continue;
+    for (const [key, oldCell] of oldBuffer.cells.entries()) {
+      if (!oldCell.collapsed) continue;
 
-          // Translate to new buffer coordinates
-          const newX = x + expansions.xMin;
-          const newY = y + expansions.yMin;
-          const newZ = z + expansions.zMin;
+      const [x, y, z] = oldBuffer.keyToCoord(key);
 
-          // Check all 6 directions for new cells
-          for (let dir = 0; dir < 6; dir++) {
-            const neighborCoords = this.buffer.getNeighborCoords(
-              newX,
-              newY,
-              newZ,
-              dir
-            );
-            if (!neighborCoords) continue;
+      // Translate to new buffer coordinates
+      const newX = x + expansions.xMin;
+      const newY = y + expansions.yMin;
+      const newZ = z + expansions.zMin;
 
-            const [nx, ny, nz] = neighborCoords;
+      // Check all 6 directions for new cells
+      for (let dir = 0; dir < 6; dir++) {
+        const neighborCoords = this.buffer.getNeighborCoords(
+          newX,
+          newY,
+          newZ,
+          dir
+        );
+        if (!neighborCoords) continue;
 
-            // Check if this neighbor is in the new region
-            const isNewCell =
-              nx < expansions.xMin ||
-              nx >= expansions.xMin + oldBuffer.width ||
-              ny < expansions.yMin ||
-              ny >= expansions.yMin + oldBuffer.height ||
-              nz < expansions.zMin ||
-              nz >= expansions.zMin + oldBuffer.depth;
+        const [nx, ny, nz] = neighborCoords;
 
-            if (isNewCell) {
-              // Add to constraint stack to propagate
-              constraintStack.push([newX, newY, newZ]);
-              break; // Only need to add once per cell
-            }
-          }
+        // Check if this neighbor is in the new region
+        const isNewCell =
+          nx < expansions.xMin ||
+          nx >= expansions.xMin + oldBuffer.width ||
+          ny < expansions.yMin ||
+          ny >= expansions.yMin + oldBuffer.height ||
+          nz < expansions.zMin ||
+          nz >= expansions.zMin + oldBuffer.depth;
+
+        if (isNewCell) {
+          // Add to constraint stack to propagate
+          constraintStack.push([newX, newY, newZ]);
+          break; // Only need to add once per cell
         }
       }
     }
@@ -355,7 +355,8 @@ export class WFC3D {
     while (constraintStack.length > 0) {
       const coords = constraintStack.pop()!;
       const [x, y, z] = coords;
-      const cell = this.buffer.cells[x][y][z];
+      const cell = this.buffer.getCell(x, y, z);
+      if (!cell) continue;
 
       for (let dir = 0; dir < 6; dir++) {
         const neighborCoords = this.buffer.getNeighborCoords(x, y, z, dir);
@@ -419,18 +420,13 @@ export class WFC3D {
     }
 
     // Run WFC only on uncollapsed cells
-    const totalCells =
-      this.buffer.width * this.buffer.height * this.buffer.depth;
+    const totalCells = this.buffer.cells.size;
     let collapsedCells = 0;
 
     // Count already collapsed cells
-    for (let x = 0; x < this.buffer.width; x++) {
-      for (let y = 0; y < this.buffer.height; y++) {
-        for (let z = 0; z < this.buffer.depth; z++) {
-          if (this.buffer.cells[x][y][z].collapsed) {
-            collapsedCells++;
-          }
-        }
+    for (const cell of this.buffer.cells.values()) {
+      if (cell.collapsed) {
+        collapsedCells++;
       }
     }
 
@@ -456,7 +452,7 @@ export class WFC3D {
       // Collapse the cell
       const tileId = this.selectTile(x, y, z);
       if (!tileId) {
-        const cell = this.buffer.cells[x][y][z];
+        const cell = this.buffer.getCell(x, y, z);
         this.lastError = {
           type: "no_valid_tile",
           message: `No valid tile found for cell at (${x}, ${y}, ${z}) during expansion`,
@@ -464,13 +460,18 @@ export class WFC3D {
           progress: collapsedCells / totalCells,
           cellsCollapsed: collapsedCells,
           totalCells,
-          details: `Cell has ${cell.possibleTiles.size} possible tiles but couldn't select one`,
+          details: `Cell has ${
+            cell?.possibleTiles.size || 0
+          } possible tiles but couldn't select one`,
         };
         return false; // No valid tile found
       }
 
-      this.buffer.cells[x][y][z].collapse(tileId);
-      collapsedCells++;
+      const cell = this.buffer.getCell(x, y, z);
+      if (cell) {
+        cell.collapse(tileId);
+        collapsedCells++;
+      }
 
       // Notify tile collapse callback
       if (onTileCollapse) {

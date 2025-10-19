@@ -26,7 +26,7 @@ export type { TileTransform };
 
 export class DebugUI {
   public gui: GUI;
-  public gridFolder: GUI;
+  public generateFolder: GUI;
   public progressElement: HTMLDivElement;
   public tilesetEditor?: TilesetEditorElements;
   public generator: WFCGenerator;
@@ -60,10 +60,10 @@ export class DebugUI {
 
     this.gui.domElement.style.right = "0px";
 
-    this.gridFolder = this.createGridControls();
+    this.generateFolder = this.createGenerateControls();
     this.createWorkerControls();
     this.createDebugControls();
-    this.createGenerationControls();
+    this.createLocalExpansionControls();
     this.progressElement = this.createProgressElement();
     this.gui.domElement.appendChild(this.progressElement);
     this.tilesetEditor = this.createTilesetEditor();
@@ -102,6 +102,11 @@ export class DebugUI {
     if (dimension === "width") this.currentWidth = value;
     if (dimension === "height") this.currentHeight = value;
     if (dimension === "depth") this.currentDepth = value;
+
+    // Update local expansion slider limits
+    if ((this as any).localExpansionControllers) {
+      (this as any).localExpansionControllers.updateLimits();
+    }
 
     // Handle auto-expand/shrink
     if (this.generator.canExpand()) {
@@ -142,8 +147,8 @@ export class DebugUI {
   /**
    * Create grid dimension controls
    */
-  private createGridControls(): GUI {
-    const gridFolder = this.gui.addFolder("Grid Dimensions");
+  private createGenerateControls(): GUI {
+    const generateFolder = this.gui.addFolder("Generate");
 
     const params = {
       width: this.currentWidth,
@@ -152,17 +157,17 @@ export class DebugUI {
     };
 
     // Width control (default range: 5-30)
-    gridFolder.add(params, "width", 5, 30, 1).onChange((value: number) => {
+    generateFolder.add(params, "width", 5, 30, 1).onChange((value: number) => {
       this.handleDimensionChange("width", value);
     });
 
     // Height control (default range: 1-20)
-    gridFolder.add(params, "height", 1, 20, 1).onChange((value: number) => {
+    generateFolder.add(params, "height", 1, 20, 1).onChange((value: number) => {
       this.handleDimensionChange("height", value);
     });
 
     // Depth control (default range: 5-30)
-    gridFolder.add(params, "depth", 5, 30, 1).onChange((value: number) => {
+    generateFolder.add(params, "depth", 5, 30, 1).onChange((value: number) => {
       this.handleDimensionChange("depth", value);
     });
 
@@ -171,72 +176,12 @@ export class DebugUI {
       cellSize: this.generator.getCellSize(),
     };
 
-    gridFolder
+    generateFolder
       .add(cellSizeParams, "cellSize", 0.1, 10, 0.1)
       .name("cell size")
       .onChange((value: number) => {
         this.generator.setCellSize(value);
       });
-
-    // Auto-expand mode control
-    const expansionParams = {
-      autoExpand: (this.generator as any).autoExpansion || false,
-    };
-
-    gridFolder
-      .add(expansionParams, "autoExpand")
-      .name("Auto-expand Mode")
-      .onChange((value: boolean) => {
-        (this.generator as any).autoExpansion = value;
-
-        // Reset generator state when disabling expansion mode
-        if (!value) {
-          this.generator.reset();
-        }
-      });
-
-    gridFolder.open();
-    return gridFolder;
-  }
-
-  /**
-   * Create generation controls
-   */
-  private createGenerationControls(): void {
-    const params = {
-      seed: this.generator.getSeed(),
-      generate: async () => {
-        // Use internal UI state for dimensions
-        await this.generator.generate();
-      },
-      randomSeed: () => {
-        const newSeed = Date.now();
-        params.seed = newSeed;
-        seedController.updateDisplay();
-        this.generator.setSeed(newSeed);
-      },
-      reset: () => {
-        this.generator.reset();
-      },
-    };
-
-    const seedController = this.gui
-      .add(params, "seed")
-      .name("Seed")
-      .onChange((value: number) => {
-        this.generator.setSeed(value);
-      });
-
-    this.gui.add(params, "randomSeed").name("Random Seed");
-    this.gui.add(params, "generate").name("Generate");
-    this.gui.add(params, "reset").name("Reset");
-  }
-
-  /**
-   * Create worker controls
-   */
-  private createWorkerControls(): void {
-    const workerFolder = this.gui.addFolder("Workers");
 
     const workerParams = {
       workerCount:
@@ -245,7 +190,7 @@ export class DebugUI {
         4,
     };
 
-    workerFolder
+    generateFolder
       .add(
         workerParams,
         "workerCount",
@@ -257,7 +202,43 @@ export class DebugUI {
       .onChange((value: number) => {
         (this.generator as any).workerCount = value;
       });
+
+    const generateParams = {
+      seed: this.generator.getSeed(),
+      generate: async () => {
+        // Use internal UI state for dimensions
+        await this.generator.generate();
+      },
+      randomSeed: () => {
+        const newSeed = Date.now();
+        generateParams.seed = newSeed;
+        seedController.updateDisplay();
+        this.generator.setSeed(newSeed);
+      },
+      reset: () => {
+        this.generator.reset();
+      },
+    };
+
+    const seedController = generateFolder
+      .add(generateParams, "seed")
+      .name("Seed")
+      .onChange((value: number) => {
+        this.generator.setSeed(value);
+      });
+
+    generateFolder.add(generateParams, "randomSeed").name("Random Seed");
+    generateFolder.add(generateParams, "generate").name("Generate");
+    generateFolder.add(generateParams, "reset").name("Reset");
+
+    generateFolder.open();
+    return generateFolder;
   }
+
+  /**
+   * Create worker controls
+   */
+  private createWorkerControls(): void {}
 
   /**
    * Create debug controls
@@ -266,7 +247,7 @@ export class DebugUI {
     const debugFolder = this.gui.addFolder("Debug");
 
     const debugParams = {
-      wireframe: false,
+      wireframe: this.generator.getDebugGrid()?.isVisible() || false,
     };
 
     debugFolder
@@ -275,6 +256,210 @@ export class DebugUI {
       .onChange((value: boolean) => {
         this.generator.setDebugGridVisible(value);
       });
+  }
+
+  /**
+   * Create local expansion controls
+   */
+  private createLocalExpansionControls(): void {
+    const localExpFolder = this.gui.addFolder("Local Expansion");
+
+    // Get actual grid bounds from sparse map
+    // Add buffer for expansion beyond current grid
+    const bounds = this.generator.getGridBounds();
+    const bufferX = Math.max(
+      10,
+      Math.ceil((bounds.maxX - bounds.minX + 1) * 0.5)
+    );
+    const bufferY = Math.max(
+      10,
+      Math.ceil((bounds.maxY - bounds.minY + 1) * 0.5)
+    );
+    const bufferZ = Math.max(
+      10,
+      Math.ceil((bounds.maxZ - bounds.minZ + 1) * 0.5)
+    );
+
+    // Allow negative indices for backward expansion
+    const minX = bounds.minX - bufferX;
+    const maxX = bounds.maxX + bufferX;
+    const minY = bounds.minY - bufferY;
+    const maxY = bounds.maxY + bufferY;
+    const minZ = bounds.minZ - bufferZ;
+    const maxZ = bounds.maxZ + bufferZ;
+
+    const params = {
+      cellX: 0,
+      cellY: 0,
+      cellZ: 0,
+      expansionX: 5,
+      expansionY: 3,
+      expansionZ: 5,
+      previewEnabled: false,
+      validateCell: () => {
+        const isOnPeriphery = (this.generator as any).isCellOnPeriphery?.(
+          params.cellX,
+          params.cellY,
+          params.cellZ
+        );
+        if (isOnPeriphery === undefined) {
+          alert("Cell validation not available");
+        } else if (isOnPeriphery) {
+          alert(
+            `Cell (${params.cellX}, ${params.cellY}, ${params.cellZ}) is on periphery ✓`
+          );
+        } else {
+          alert(
+            `Cell (${params.cellX}, ${params.cellY}, ${params.cellZ}) is NOT on periphery ✗`
+          );
+        }
+      },
+      expandFromCell: async () => {
+        try {
+          await this.generator.expandFromCell(
+            params.cellX,
+            params.cellY,
+            params.cellZ,
+            params.expansionX,
+            params.expansionY,
+            params.expansionZ
+          );
+          console.log("Expanded from cell successfully");
+          // Update preview after expansion (will show new potential expansion cells)
+          updatePreview();
+        } catch (error) {
+          console.error("Failed to expand from cell:", error);
+          alert(`Error: ${(error as Error).message}`);
+        }
+      },
+      deleteFromCell: async () => {
+        try {
+          await this.generator.deleteFromCell(
+            params.cellX,
+            params.cellY,
+            params.cellZ,
+            params.expansionX,
+            params.expansionY,
+            params.expansionZ
+          );
+          console.log("Deleted from cell successfully");
+          // Update preview after deletion
+          updatePreview();
+        } catch (error) {
+          console.error("Failed to delete from cell:", error);
+          alert(`Error: ${(error as Error).message}`);
+        }
+      },
+    };
+
+    // Helper function to update preview
+    const updatePreview = () => {
+      const debugGrid = this.generator.getDebugGrid();
+      if (!debugGrid) return;
+
+      if (params.previewEnabled) {
+        const previewCells = this.generator.getExpansionPreview(
+          params.cellX,
+          params.cellY,
+          params.cellZ,
+          params.expansionX,
+          params.expansionY,
+          params.expansionZ
+        );
+
+        if (previewCells.length === 0) {
+          debugGrid.clearExpansionPreview();
+        } else {
+          debugGrid.showExpansionPreview(previewCells);
+        }
+      } else {
+        debugGrid.clearExpansionPreview();
+      }
+    };
+
+    // Helper function to update cell highlight and preview
+    const updateHighlight = () => {
+      const debugGrid = this.generator.getDebugGrid();
+      if (debugGrid) {
+        debugGrid.highlightCell(params.cellX, params.cellY, params.cellZ);
+        // Update preview when coordinates change (if enabled)
+        updatePreview();
+      }
+    };
+
+    // Cell coordinate controls with highlight update
+    const cellXController = localExpFolder
+      .add(params, "cellX", minX, maxX, 1)
+      .name("Cell X")
+      .onChange(() => updateHighlight());
+
+    const cellYController = localExpFolder
+      .add(params, "cellY", minY, maxY, 1)
+      .name("Cell Y")
+      .onChange(() => updateHighlight());
+
+    const cellZController = localExpFolder
+      .add(params, "cellZ", minZ, maxZ, 1)
+      .name("Cell Z")
+      .onChange(() => updateHighlight());
+
+    localExpFolder
+      .add(params, "expansionX", 1, 20, 1)
+      .name("Expansion X")
+      .onChange(() => updatePreview());
+    localExpFolder
+      .add(params, "expansionY", 1, 20, 1)
+      .name("Expansion Y")
+      .onChange(() => updatePreview());
+    localExpFolder
+      .add(params, "expansionZ", 1, 20, 1)
+      .name("Expansion Z")
+      .onChange(() => updatePreview());
+    localExpFolder.add(params, "validateCell").name("Validate Cell");
+    localExpFolder
+      .add(params, "previewEnabled")
+      .name("Preview Expansion")
+      .onChange(() => updatePreview());
+    localExpFolder.add(params, "expandFromCell").name("Expand From Cell");
+    localExpFolder.add(params, "deleteFromCell").name("Delete From Cell");
+
+    // Initialize highlight
+    updateHighlight();
+
+    // Store controllers for later updates (if grid dimensions change)
+    (this as any).localExpansionControllers = {
+      cellX: cellXController,
+      cellY: cellYController,
+      cellZ: cellZController,
+      updateLimits: () => {
+        const newBounds = this.generator.getGridBounds();
+        const newBufferX = Math.max(
+          10,
+          Math.ceil((newBounds.maxX - newBounds.minX + 1) * 0.5)
+        );
+        const newBufferY = Math.max(
+          10,
+          Math.ceil((newBounds.maxY - newBounds.minY + 1) * 0.5)
+        );
+        const newBufferZ = Math.max(
+          10,
+          Math.ceil((newBounds.maxZ - newBounds.minZ + 1) * 0.5)
+        );
+
+        // Allow negative indices for backward expansion
+        const newMinX = newBounds.minX - newBufferX;
+        const newMaxX = newBounds.maxX + newBufferX;
+        const newMinY = newBounds.minY - newBufferY;
+        const newMaxY = newBounds.maxY + newBufferY;
+        const newMinZ = newBounds.minZ - newBufferZ;
+        const newMaxZ = newBounds.maxZ + newBufferZ;
+
+        // Update controller limits
+        cellXController.min(newMinX).max(newMaxX);
+        cellYController.min(newMinY).max(newMaxY);
+        cellZController.min(newMinZ).max(newMaxZ);
+      },
+    };
   }
 
   /**

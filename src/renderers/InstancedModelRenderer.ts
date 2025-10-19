@@ -25,31 +25,57 @@ export class InstancedModelRenderer {
   }
 
   /**
-   * Render the collapsed WFC grid using instanced meshes
+   * Helper to parse map key back to coordinates
    */
-  render(grid: string[][][]): void {
+  private keyToCoord(key: string): [number, number, number] {
+    const parts = key.split(",").map(Number);
+    return [parts[0], parts[1], parts[2]];
+  }
+
+  /**
+   * Render the collapsed WFC grid using instanced meshes
+   * Accepts either sparse map or 3D array for backward compatibility
+   */
+  render(grid: Map<string, string> | string[][][]): void {
     // Clear existing instances
     this.clear();
 
     // Count instances per tile type
     const instanceCounts = new Map<string, TileInstance[]>();
 
-    const width = grid.length;
-    const height = grid[0]?.length || 0;
-    const depth = grid[0]?.[0]?.length || 0;
+    // Handle both sparse map and array formats
+    if (grid instanceof Map) {
+      // Sparse map format
+      for (const [key, tileId] of grid.entries()) {
+        if (!tileId) continue;
 
-    for (let x = 0; x < width; x++) {
-      for (let y = 0; y < height; y++) {
-        for (let z = 0; z < depth; z++) {
-          const tileId = grid[x][y][z];
+        const [x, y, z] = this.keyToCoord(key);
 
-          if (!tileId) continue;
+        if (!instanceCounts.has(tileId)) {
+          instanceCounts.set(tileId, []);
+        }
 
-          if (!instanceCounts.has(tileId)) {
-            instanceCounts.set(tileId, []);
+        instanceCounts.get(tileId)!.push({ tileId, x, y, z });
+      }
+    } else {
+      // 3D array format (backward compatibility)
+      const width = grid.length;
+      const height = grid[0]?.length || 0;
+      const depth = grid[0]?.[0]?.length || 0;
+
+      for (let x = 0; x < width; x++) {
+        for (let y = 0; y < height; y++) {
+          for (let z = 0; z < depth; z++) {
+            const tileId = grid[x][y][z];
+
+            if (!tileId) continue;
+
+            if (!instanceCounts.has(tileId)) {
+              instanceCounts.set(tileId, []);
+            }
+
+            instanceCounts.get(tileId)!.push({ tileId, x, y, z });
           }
-
-          instanceCounts.get(tileId)!.push({ tileId, x, y, z });
         }
       }
     }
@@ -137,7 +163,7 @@ export class InstancedModelRenderer {
   /**
    * Update the renderer with a new grid, preserving existing instances where possible
    */
-  updateGrid(collapsedGrid: string[][][]): void {
+  updateGrid(collapsedGrid: Map<string, string> | string[][][]): void {
     // For now, use simple re-render approach
     // Future optimization: track changes and update only modified instances
     this.render(collapsedGrid);

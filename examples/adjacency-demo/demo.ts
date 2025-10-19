@@ -135,6 +135,5 @@ async function loadTilesFromGLBFolder(): Promise<ModelTile3DConfig[]> {
     // });
   } catch (error) {
     console.error("❌ Error initializing demo:", error);
-    alert("Error loading demo. Check console for details.");
   }
 })();

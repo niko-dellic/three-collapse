@@ -39,13 +39,13 @@ class Cell {
 }
 
 /**
- * 3D buffer for Wave Function Collapse
+ * 3D buffer for Wave Function Collapse using sparse map structure
  */
 export class WFC3DBuffer {
   width: number;
   height: number;
   depth: number;
-  cells: Cell[][][];
+  cells: Map<string, Cell>; // Sparse map: key = "x,y,z"
   tiles: Map<string, WFCTile3D>;
 
   constructor(
@@ -59,36 +59,55 @@ export class WFC3DBuffer {
     this.depth = depth;
     this.tiles = new Map(tiles.map((t) => [t.id, t]));
 
-    // Initialize all cells with all possible tiles
+    // Initialize all cells with all possible tiles using sparse map
     const tileIds = tiles.map((t) => t.id);
-    this.cells = [];
+    this.cells = new Map();
 
     for (let x = 0; x < width; x++) {
-      this.cells[x] = [];
       for (let y = 0; y < height; y++) {
-        this.cells[x][y] = [];
         for (let z = 0; z < depth; z++) {
-          this.cells[x][y][z] = new Cell(tileIds);
+          const key = this.coordToKey(x, y, z);
+          this.cells.set(key, new Cell(tileIds));
         }
       }
     }
   }
 
   /**
+   * Convert coordinates to map key
+   */
+  coordToKey(x: number, y: number, z: number): string {
+    return `${x},${y},${z}`;
+  }
+
+  /**
+   * Parse map key back to coordinates
+   */
+  keyToCoord(key: string): [number, number, number] {
+    const parts = key.split(",").map(Number);
+    return [parts[0], parts[1], parts[2]];
+  }
+
+  /**
+   * Check if cell exists in sparse map
+   */
+  hasCell(x: number, y: number, z: number): boolean {
+    return this.cells.has(this.coordToKey(x, y, z));
+  }
+
+  /**
+   * Get all existing cell coordinates
+   */
+  getAllCoordinates(): Array<[number, number, number]> {
+    return Array.from(this.cells.keys()).map((key) => this.keyToCoord(key));
+  }
+
+  /**
    * Get cell at position
    */
   getCell(x: number, y: number, z: number): Cell | null {
-    if (
-      x < 0 ||
-      x >= this.width ||
-      y < 0 ||
-      y >= this.height ||
-      z < 0 ||
-      z >= this.depth
-    ) {
-      return null;
-    }
-    return this.cells[x][y][z];
+    const key = this.coordToKey(x, y, z);
+    return this.cells.get(key) || null;
   }
 
   /**
@@ -144,13 +163,9 @@ export class WFC3DBuffer {
    * Check if all cells are collapsed
    */
   isComplete(): boolean {
-    for (let x = 0; x < this.width; x++) {
-      for (let y = 0; y < this.height; y++) {
-        for (let z = 0; z < this.depth; z++) {
-          if (!this.cells[x][y][z].collapsed) {
-            return false;
-          }
-        }
+    for (const cell of this.cells.values()) {
+      if (!cell.collapsed) {
+        return false;
       }
     }
     return true;
@@ -160,14 +175,9 @@ export class WFC3DBuffer {
    * Check if buffer is in a valid state (no contradictions)
    */
   isValid(): boolean {
-    for (let x = 0; x < this.width; x++) {
-      for (let y = 0; y < this.height; y++) {
-        for (let z = 0; z < this.depth; z++) {
-          const cell = this.cells[x][y][z];
-          if (!cell.collapsed && cell.possibleTiles.size === 0) {
-            return false; // Contradiction detected
-          }
-        }
+    for (const cell of this.cells.values()) {
+      if (!cell.collapsed && cell.possibleTiles.size === 0) {
+        return false; // Contradiction detected
       }
     }
     return true;
@@ -201,22 +211,21 @@ export class WFC3DBuffer {
     const tiles = Array.from(this.tiles.values());
     const newBuffer = new WFC3DBuffer(newWidth, newHeight, newDepth, tiles);
 
-    // Copy existing collapsed cells to their new positions
-    for (let x = 0; x < this.width; x++) {
-      for (let y = 0; y < this.height; y++) {
-        for (let z = 0; z < this.depth; z++) {
-          const oldCell = this.cells[x][y][z];
-          const newX = x + expansions.xMin;
-          const newY = y + expansions.yMin;
-          const newZ = z + expansions.zMin;
-          const newCell = newBuffer.cells[newX][newY][newZ];
+    // Copy existing cells to their new positions
+    for (const [key, oldCell] of this.cells.entries()) {
+      const [x, y, z] = this.keyToCoord(key);
+      const newX = x + expansions.xMin;
+      const newY = y + expansions.yMin;
+      const newZ = z + expansions.zMin;
+      const newKey = newBuffer.coordToKey(newX, newY, newZ);
+      const newCell = newBuffer.cells.get(newKey);
 
-          if (oldCell.collapsed && oldCell.tileId) {
-            newCell.collapse(oldCell.tileId);
-          } else {
-            // Copy possible tiles for uncollapsed cells
-            newCell.possibleTiles = new Set(oldCell.possibleTiles);
-          }
+      if (newCell) {
+        if (oldCell.collapsed && oldCell.tileId) {
+          newCell.collapse(oldCell.tileId);
+        } else {
+          // Copy possible tiles for uncollapsed cells
+          newCell.possibleTiles = new Set(oldCell.possibleTiles);
         }
       }
     }
@@ -230,20 +239,16 @@ export class WFC3DBuffer {
   serialize(): SerializedBuffer {
     const cellData: SerializedCell[] = [];
 
-    for (let x = 0; x < this.width; x++) {
-      for (let y = 0; y < this.height; y++) {
-        for (let z = 0; z < this.depth; z++) {
-          const cell = this.cells[x][y][z];
-          cellData.push({
-            x,
-            y,
-            z,
-            collapsed: cell.collapsed,
-            tileId: cell.tileId,
-            possibleTiles: Array.from(cell.possibleTiles),
-          });
-        }
-      }
+    for (const [key, cell] of this.cells.entries()) {
+      const [x, y, z] = this.keyToCoord(key);
+      cellData.push({
+        x,
+        y,
+        z,
+        collapsed: cell.collapsed,
+        tileId: cell.tileId,
+        possibleTiles: Array.from(cell.possibleTiles),
+      });
     }
 
     return {
@@ -261,6 +266,7 @@ export class WFC3DBuffer {
     serialized: SerializedBuffer,
     tiles: WFCTile3D[]
   ): WFC3DBuffer {
+    // Create buffer with dimensions (will create empty sparse grid)
     const buffer = new WFC3DBuffer(
       serialized.width,
       serialized.height,
@@ -268,15 +274,40 @@ export class WFC3DBuffer {
       tiles
     );
 
-    // Restore cell states
+    // Clear the auto-populated cells
+    buffer.cells.clear();
+
+    // Restore cell states from serialized data
     for (const cellData of serialized.cellData) {
-      const cell = buffer.cells[cellData.x][cellData.y][cellData.z];
+      const key = buffer.coordToKey(cellData.x, cellData.y, cellData.z);
+      const cell = new Cell(tiles.map((t) => t.id));
       cell.collapsed = cellData.collapsed;
       cell.tileId = cellData.tileId;
       cell.possibleTiles = new Set(cellData.possibleTiles);
+      buffer.cells.set(key, cell);
     }
 
     return buffer;
+  }
+
+  /**
+   * Convert sparse map to 3D array (for backward compatibility)
+   */
+  toArray(): string[][][] {
+    const grid: string[][][] = [];
+
+    for (let x = 0; x < this.width; x++) {
+      grid[x] = [];
+      for (let y = 0; y < this.height; y++) {
+        grid[x][y] = [];
+        for (let z = 0; z < this.depth; z++) {
+          const cell = this.getCell(x, y, z);
+          grid[x][y][z] = cell?.tileId || "";
+        }
+      }
+    }
+
+    return grid;
   }
 }
 
