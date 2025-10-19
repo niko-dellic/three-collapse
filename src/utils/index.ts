@@ -30,7 +30,8 @@ export {
   type ValidationResult,
 } from "./TilesetValidator";
 
-export { DebugUI, type DebugUIElements, type TileTransform } from "./debugUI";
+export { DebugUI } from "./debugUI";
+export { type TileTransform } from "./TilesetEditor";
 
 export { DebugGrid } from "./DebugGrid";
 

@@ -25,6 +25,13 @@ export class InstancedModelRenderer {
   }
 
   /**
+   * Check if models have been loaded
+   */
+  hasModelsLoaded(): boolean {
+    return this.modelData !== null;
+  }
+
+  /**
    * Helper to parse map key back to coordinates
    */
   private keyToCoord(key: string): [number, number, number] {
@@ -33,10 +40,22 @@ export class InstancedModelRenderer {
   }
 
   /**
+   * Helper to convert coordinates to map key
+   */
+  private coordToKey(x: number, y: number, z: number): string {
+    return `${x},${y},${z}`;
+  }
+
+  /**
    * Render the collapsed WFC grid using instanced meshes
    * Accepts either sparse map or 3D array for backward compatibility
+   * @param grid - The grid to render
+   * @param enabledCells - Optional set of cell keys to render (for selective visibility)
    */
-  render(grid: Map<string, string> | string[][][]): void {
+  render(
+    grid: Map<string, string> | string[][][],
+    enabledCells?: Set<string>
+  ): void {
     // Clear existing instances
     this.clear();
 
@@ -48,6 +67,9 @@ export class InstancedModelRenderer {
       // Sparse map format
       for (const [key, tileId] of grid.entries()) {
         if (!tileId) continue;
+
+        // Check if this cell is enabled for rendering
+        if (enabledCells && !enabledCells.has(key)) continue;
 
         const [x, y, z] = this.keyToCoord(key);
 
@@ -69,6 +91,10 @@ export class InstancedModelRenderer {
             const tileId = grid[x][y][z];
 
             if (!tileId) continue;
+
+            // Check if this cell is enabled for rendering
+            const key = this.coordToKey(x, y, z);
+            if (enabledCells && !enabledCells.has(key)) continue;
 
             if (!instanceCounts.has(tileId)) {
               instanceCounts.set(tileId, []);

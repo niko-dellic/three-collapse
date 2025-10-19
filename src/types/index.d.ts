@@ -125,3 +125,10 @@ export interface SerializedBuffer {
     possibleTiles: string[];
   }[];
 }
+
+export interface DebugUIElements {
+  gui: GUI;
+  gridFolder: GUI;
+  progressElement?: HTMLDivElement;
+  tilesetEditor?: TilesetEditorElements;
+}

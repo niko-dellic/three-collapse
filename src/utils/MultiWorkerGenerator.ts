@@ -2,7 +2,7 @@ import { WorkerPool } from "./WorkerPool";
 import {
   splitGridIntoRegions,
   getBoundaryCells,
-  type Region3D,
+  getCellsForRegion,
 } from "./RegionSplitter";
 import { WFC3D, WFCTile3D, type ModelTile3DConfig } from "../wfc3d";
 
@@ -23,7 +23,7 @@ export async function generateWithWorkers(
   width: number,
   height: number,
   depth: number,
-  tiles: ModelTile3DConfig[],
+  tiles: ModelTile3DConfig[] | Omit<ModelTile3DConfig, "model">[],
   workerPool: WorkerPool,
   seed?: number,
   onProgress?: (progress: number) => void,
@@ -74,30 +74,50 @@ export async function generateWithWorkers(
   // Split grid into regions
   const regions = splitGridIntoRegions(width, height, depth, workerCount);
 
-  // Generate boundary layer on main thread
+  // Get ALL boundary cells
   const boundaryCells = getBoundaryCells(width, height, depth, regions);
+  const boundarySet = new Set(
+    boundaryCells.map(([x, y, z]) => `${x},${y},${z}`)
+  );
+
+  // Pre-collapse all boundaries on main thread
   const preCollapsedCells = await generateBoundaries(
     width,
     height,
     depth,
     tiles,
     boundaryCells,
-    seed
+    seed,
+    handleTileUpdate
   );
 
-  // Generate each region in parallel
-  const regionPromises = regions.map((region, index) =>
-    generateRegion(
-      width,
-      height,
-      depth,
-      tiles,
-      region,
-      preCollapsedCells,
-      workerPool,
-      seed ? seed + index : undefined,
-      handleTileUpdate
-    )
+  // Get interior cells for each region
+  const regionCellAssignments = regions.map((region) =>
+    getCellsForRegion(region, boundarySet)
+  );
+
+  // Log cell distribution
+  console.log(`Distributing cells across ${workerCount} workers:`);
+  regionCellAssignments.forEach((cells, index) => {
+    console.log(`  Worker ${index} assigned ${cells.length} cells`);
+  });
+
+  // Create tasks with specific cell assignments
+  const regionPromises = regionCellAssignments.map((assignedCells, index) =>
+    workerPool.executeTask({
+      id: `generate-region-${index}`,
+      message: {
+        type: "generate",
+        width,
+        height,
+        depth,
+        tiles,
+        seed: seed ? seed + index : undefined,
+        assignedCells, // NEW: Only these cells
+        preCollapsedCells,
+      },
+      onTileUpdate: handleTileUpdate,
+    })
   );
 
   // Wait for all regions to complete
@@ -118,7 +138,7 @@ async function generateSingleWorker(
   width: number,
   height: number,
   depth: number,
-  tiles: ModelTile3DConfig[],
+  tiles: ModelTile3DConfig[] | Omit<ModelTile3DConfig, "model">[],
   workerPool: WorkerPool,
   seed?: number,
   _onProgress?: (progress: number) => void,
@@ -146,12 +166,15 @@ async function generateBoundaries(
   width: number,
   height: number,
   depth: number,
-  tiles: ModelTile3DConfig[],
+  tiles: ModelTile3DConfig[] | Omit<ModelTile3DConfig, "model">[],
   boundaryCells: Array<[number, number, number]>,
-  seed?: number
+  seed?: number,
+  onTileUpdate?: TileUpdateCallback
 ): Promise<Array<{ x: number; y: number; z: number; tileId: string }>> {
   // Create WFC instance
-  const wfcTiles = tiles.map((config) => new WFCTile3D(config));
+  const wfcTiles = tiles.map(
+    (config) => new WFCTile3D(config as ModelTile3DConfig)
+  );
   const wfc = new WFC3D({
     width,
     height,
@@ -160,7 +183,6 @@ async function generateBoundaries(
     seed,
   });
 
-  // Collapse only boundary cells (simplified - just collapse a subset)
   const preCollapsed: Array<{
     x: number;
     y: number;
@@ -168,11 +190,9 @@ async function generateBoundaries(
     tileId: string;
   }> = [];
 
-  // For now, we'll collapse a small number of boundary cells
-  // In a full implementation, you'd want to run WFC focusing on boundaries
-  const maxBoundaries = Math.min(boundaryCells.length, 50);
-  for (let i = 0; i < maxBoundaries; i++) {
-    const [x, y, z] = boundaryCells[i];
+  // Collapse ALL boundary cells (not just 50)
+  console.log(`Pre-collapsing ${boundaryCells.length} boundary cells...`);
+  for (const [x, y, z] of boundaryCells) {
     const cell = wfc.buffer.getCell(x, y, z);
 
     if (cell && !cell.collapsed && cell.possibleTiles.size > 0) {
@@ -180,50 +200,21 @@ async function generateBoundaries(
       const tileId =
         possibleTiles[Math.floor(Math.random() * possibleTiles.length)];
       cell.collapse(tileId);
+
+      // Propagate constraints to neighbors
+      wfc.propagate(x, y, z);
+
       preCollapsed.push({ x, y, z, tileId });
+
+      // Trigger tile update callback for rendering
+      if (onTileUpdate) {
+        onTileUpdate(x, y, z, tileId);
+      }
     }
   }
-
-  return preCollapsed;
-}
-
-/**
- * Generate a specific region using worker pool
- */
-async function generateRegion(
-  fullWidth: number,
-  fullHeight: number,
-  fullDepth: number,
-  tiles: ModelTile3DConfig[],
-  region: Region3D,
-  preCollapsedCells: Array<{ x: number; y: number; z: number; tileId: string }>,
-  workerPool: WorkerPool,
-  seed?: number,
-  onTileUpdate?: (x: number, y: number, z: number, tileId: string) => void
-): Promise<string[][][]> {
-  // Filter pre-collapsed cells that are in this region or adjacent
-  const relevantCells = preCollapsedCells.filter(
-    (cell) =>
-      cell.x >= region.xMin - 1 &&
-      cell.x <= region.xMax &&
-      cell.y >= region.yMin - 1 &&
-      cell.y <= region.yMax &&
-      cell.z >= region.zMin - 1 &&
-      cell.z <= region.zMax
+  console.log(
+    `Pre-collapsed ${preCollapsed.length} boundary cells successfully`
   );
 
-  return await workerPool.executeTask({
-    id: `generate-region-${region.xMin}-${region.yMin}-${region.zMin}`,
-    message: {
-      type: "generate",
-      width: fullWidth,
-      height: fullHeight,
-      depth: fullDepth,
-      tiles,
-      seed,
-      region,
-      preCollapsedCells: relevantCells,
-    },
-    onTileUpdate,
-  });
+  return preCollapsed;
 }

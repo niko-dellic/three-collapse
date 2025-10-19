@@ -7,18 +7,10 @@ import type { WFCGenerator } from "../generators/WFCGenerator";
 import {
   createTilesetEditor,
   type TilesetEditorElements,
-  type TileTransform,
 } from "./TilesetEditor";
 import debugUIStyles from "./debugUI.css?inline";
-
-export interface DebugUIElements {
-  gui: GUI;
-  gridFolder: GUI;
-  progressElement?: HTMLDivElement;
-  tilesetEditor?: TilesetEditorElements;
-}
-
-export type { TileTransform };
+import type { Controller } from "lil-gui";
+import type { TileTransform } from "./TilesetEditor";
 
 /**
  * Debug UI class for WFC demos
@@ -31,21 +23,16 @@ export class DebugUI {
   public tilesetEditor?: TilesetEditorElements;
   public generator: WFCGenerator;
 
-  // Track UI state
-  private currentWidth: number = 10;
-  private currentHeight: number = 8;
-  private currentDepth: number = 10;
-
   private static stylesInjected = false;
+  private localExpansionControllers: {
+    cellX: Controller;
+    cellY: Controller;
+    cellZ: Controller;
+    updateLimits: () => void;
+  } | null = null;
 
   constructor(generator: WFCGenerator, container: HTMLElement = document.body) {
     this.generator = generator;
-
-    // Initialize with generator's current dimensions if available
-    const dims = this.generator.getDimensions();
-    if (dims.width > 0) this.currentWidth = dims.width;
-    if (dims.height > 0) this.currentHeight = dims.height;
-    if (dims.depth > 0) this.currentDepth = dims.depth;
 
     // Inject custom styles once
     if (!DebugUI.stylesInjected) {
@@ -90,57 +77,22 @@ export class DebugUI {
   /**
    * Helper to handle dimension changes with auto-expand logic
    */
-  private handleDimensionChange(
-    dimension: "width" | "height" | "depth",
-    value: number
-  ): void {
-    const previousWidth = this.currentWidth;
-    const previousHeight = this.currentHeight;
-    const previousDepth = this.currentDepth;
-
-    // Update internal state
-    if (dimension === "width") this.currentWidth = value;
-    if (dimension === "height") this.currentHeight = value;
-    if (dimension === "depth") this.currentDepth = value;
-
+  private async handleDimensionChange(
+    _dimension: "width" | "height" | "depth",
+    _value: number
+  ): Promise<void> {
     // Update local expansion slider limits
-    if ((this as any).localExpansionControllers) {
-      (this as any).localExpansionControllers.updateLimits();
-    }
+    if (this.localExpansionControllers)
+      this.localExpansionControllers.updateLimits();
 
     // Handle auto-expand/shrink
     if (this.generator.canExpand()) {
-      const newWidth = this.currentWidth;
-      const newHeight = this.currentHeight;
-      const newDepth = this.currentDepth;
+      const newDimensions = this.generator.getDimensions();
 
-      const widthIncreased = newWidth > previousWidth;
-      const heightIncreased = newHeight > previousHeight;
-      const depthIncreased = newDepth > previousDepth;
-
-      const widthDecreased = newWidth < previousWidth;
-      const heightDecreased = newHeight < previousHeight;
-      const depthDecreased = newDepth < previousDepth;
-
-      const anySizeIncreased =
-        widthIncreased || heightIncreased || depthIncreased;
-      const anySizeDecreased =
-        widthDecreased || heightDecreased || depthDecreased;
-
-      if (anySizeDecreased && !anySizeIncreased) {
-        setTimeout(async () => {
-          await this.generator.shrink(newWidth, newHeight, newDepth);
-        }, 500);
-      } else if (anySizeIncreased && !anySizeDecreased) {
-        setTimeout(async () => {
-          await this.generator.expand(newWidth, newHeight, newDepth);
-        }, 500);
-      } else if (anySizeIncreased && anySizeDecreased) {
-        setTimeout(async () => {
-          await this.generator.shrink(newWidth, newHeight, newDepth);
-          await this.generator.expand(newWidth, newHeight, newDepth);
-        }, 500);
-      }
+      const { width, height, depth } = newDimensions;
+      console.log("width", width);
+      await this.generator.expand(width, height, depth);
+      // await this.generator.shrink(width, height, depth);
     }
   }
 
@@ -150,26 +102,29 @@ export class DebugUI {
   private createGenerateControls(): GUI {
     const generateFolder = this.gui.addFolder("Generate");
 
-    const params = {
-      width: this.currentWidth,
-      height: this.currentHeight,
-      depth: this.currentDepth,
-    };
-
     // Width control (default range: 5-30)
-    generateFolder.add(params, "width", 5, 30, 1).onChange((value: number) => {
-      this.handleDimensionChange("width", value);
-    });
+    generateFolder
+      .add(this.generator, "width" as keyof WFCGenerator, 5, 30, 1)
+      .onChange((value: number) => {
+        this.handleDimensionChange("width", value);
+      })
+      .listen();
 
     // Height control (default range: 1-20)
-    generateFolder.add(params, "height", 1, 20, 1).onChange((value: number) => {
-      this.handleDimensionChange("height", value);
-    });
+    generateFolder
+      .add(this.generator, "height" as keyof WFCGenerator, 1, 20, 1)
+      .onChange((value: number) => {
+        this.handleDimensionChange("height", value);
+      })
+      .listen();
 
     // Depth control (default range: 5-30)
-    generateFolder.add(params, "depth", 5, 30, 1).onChange((value: number) => {
-      this.handleDimensionChange("depth", value);
-    });
+    generateFolder
+      .add(this.generator, "depth" as keyof WFCGenerator, 5, 30, 1)
+      .onChange((value: number) => {
+        this.handleDimensionChange("depth", value);
+      })
+      .listen();
 
     // Cell Size control (default range: 0.1-10)
     const cellSizeParams = {
@@ -184,23 +139,16 @@ export class DebugUI {
       });
 
     const workerParams = {
-      workerCount:
-        (this.generator as any).workerCount ||
-        navigator.hardwareConcurrency ||
-        4,
+      workerCount: this.generator.getWorkerCount(),
     };
 
+    const maxWorkers = navigator.hardwareConcurrency || 8;
     generateFolder
-      .add(
-        workerParams,
-        "workerCount",
-        1,
-        navigator.hardwareConcurrency || 8,
-        1
-      )
-      .name("Worker Count")
+      .add(workerParams, "workerCount", 1, maxWorkers, 1)
+      .name(`Workers (max: ${maxWorkers})`)
       .onChange((value: number) => {
-        (this.generator as any).workerCount = value;
+        this.generator.setWorkerCount(value);
+        console.log(`✓ Worker count changed to ${value}`);
       });
 
     const generateParams = {
@@ -427,7 +375,7 @@ export class DebugUI {
     updateHighlight();
 
     // Store controllers for later updates (if grid dimensions change)
-    (this as any).localExpansionControllers = {
+    this.localExpansionControllers = {
       cellX: cellXController,
       cellY: cellYController,
       cellZ: cellZController,

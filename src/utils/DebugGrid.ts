@@ -235,6 +235,7 @@ export class DebugGrid {
       transparent: true,
       opacity: 0.6,
       side: THREE.DoubleSide,
+      depthTest: false,
     });
 
     this.highlightMesh = new THREE.Mesh(geometry, material);

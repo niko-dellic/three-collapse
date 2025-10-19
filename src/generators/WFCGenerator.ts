@@ -1,24 +1,17 @@
 import * as THREE from "three";
 
 import { WorkerPool } from "../utils/WorkerPool";
-import {
-  ModelTile3DConfig,
-  WFC3DError,
-  WFC3D,
-  WFC3DBuffer,
-  WFCTile3D,
-} from "../wfc3d";
+import { ModelTile3DConfig, WFC3DError } from "../wfc3d";
 import { DebugUI, prepareTilesForWorker, validateTileset } from "../utils";
 import { DebugGrid } from "../utils/DebugGrid";
 import { InstancedModelRenderer } from "../renderers/InstancedModelRenderer";
 import { GLBTileLoader } from "../loaders/GLBTileLoader";
+import { generateWithWorkers } from "../utils/MultiWorkerGenerator";
 import type {
   WFCGeneratorOptions,
   GenerateOptions,
   ExpandOptions,
-  WorkerResponse,
   TileTransformOverride,
-  SerializedBuffer,
 } from "../types";
 
 /**
@@ -27,7 +20,6 @@ import type {
 export class WFCGenerator {
   private tiles: ModelTile3DConfig[];
   private workerPool: WorkerPool;
-  private worker: Worker | null = null;
   private maxRetries: number = 3;
   private seed: number = Date.now();
   private debugGrid: DebugGrid | null = null;
@@ -40,6 +32,9 @@ export class WFCGenerator {
   private width: number = 8;
   private height: number = 1;
   private depth: number = 8;
+
+  // Track which cells are enabled for rendering
+  private enabledCells: Set<string> = new Set();
 
   // Track actual bounds of sparse grid
   private gridBounds = {
@@ -124,10 +119,17 @@ export class WFCGenerator {
       attempt++;
 
       try {
-        const result = await this.runGeneration(
-          width,
-          height,
-          depth,
+        // Use unified collapse method
+        const result = await this.runCollapse(
+          {
+            minX: 0,
+            maxX: width,
+            minY: 0,
+            maxY: height,
+            minZ: 0,
+            maxZ: depth,
+          },
+          null, // Render all cells
           seed + attempt - 1,
           options
         );
@@ -138,21 +140,17 @@ export class WFCGenerator {
         // Update grid bounds
         this.updateGridBounds();
 
-        // Update debug grid
+        // Update debug grid (generate always starts at origin)
         if (this.debugGrid) {
-          const bounds = this.getGridBounds();
           this.debugGrid.updateGrid(
             width,
             height,
             depth,
-            bounds.minX,
-            bounds.minY,
-            bounds.minZ
+            0, // Grid always starts at origin for generate
+            0,
+            0
           );
         }
-
-        // Render the final result
-        this.renderer.render(result);
 
         // Show completion
         const stats = this.renderer.getStats();
@@ -208,69 +206,238 @@ export class WFCGenerator {
   }
 
   /**
-   * Run the actual generation process
+   * Unified collapse method for both generation and expansion
+   * @param bounds - Region bounds to collapse
+   * @param cellsToEnable - Cells to render (null = render all)
+   * @param seed - Random seed
+   * @param options - Generation or expansion options
+   * @returns Promise resolving to the collapsed sparse grid map
    */
-  private async runGeneration(
-    width: number,
-    height: number,
-    depth: number,
-    seed: number,
-    options: GenerateOptions
-  ): Promise<Map<string, string>> {
-    // Initialize empty sparse grid
-    const internalGrid = this.createEmptyMap();
-
-    return this.runWorkerTask(
-      internalGrid,
-      options,
-      {
-        type: "generate",
-        width,
-        height,
-        depth,
-        tiles: prepareTilesForWorker(this.tiles),
-        seed,
-      },
-      "Generation failed - contradiction occurred"
-    );
-  }
-
-  /**
-   * Run the actual expansion process
-   */
-  private async runExpansion(
-    expansions: {
-      xMin: number;
-      xMax: number;
-      yMin: number;
-      yMax: number;
-      zMin: number;
-      zMax: number;
+  private async runCollapse(
+    bounds: {
+      minX: number;
+      maxX: number;
+      minY: number;
+      maxY: number;
+      minZ: number;
+      maxZ: number;
     },
+    cellsToEnable: Array<[number, number, number]> | null,
     seed: number,
-    options: ExpandOptions
+    options: GenerateOptions | ExpandOptions
   ): Promise<Map<string, string>> {
-    // Initialize sparse map and copy existing data
-    const internalGrid = this.createEmptyMap();
-    if (this.grid) this.copyMapData(this.grid, internalGrid);
+    // Calculate dimensions from bounds
+    const width = bounds.maxX - bounds.minX;
+    const height = bounds.maxY - bounds.minY;
+    const depth = bounds.maxZ - bounds.minZ;
 
-    return this.runWorkerTask(
-      internalGrid,
-      options,
-      {
-        type: "expand",
-        existingBuffer: this.serializeBuffer(
-          this.grid!,
-          this.width,
-          this.height,
-          this.depth
-        ),
-        expansions,
-        tiles: prepareTilesForWorker(this.tiles),
-        seed,
-      },
-      "Expansion failed - contradiction occurred"
+    // Initialize sparse grid
+    const internalGrid = this.createEmptyMap();
+
+    // Build preCollapsedCells array from existing grid
+    const preCollapsedCells: Array<{
+      x: number;
+      y: number;
+      z: number;
+      tileId: string;
+    }> = [];
+
+    if (this.grid) {
+      for (const [key, tileId] of this.grid.entries()) {
+        if (!tileId) continue;
+        const [worldX, worldY, worldZ] = this.keyToCoord(key);
+
+        // Only include cells within the bounds
+        if (
+          worldX >= bounds.minX &&
+          worldX < bounds.maxX &&
+          worldY >= bounds.minY &&
+          worldY < bounds.maxY &&
+          worldZ >= bounds.minZ &&
+          worldZ < bounds.maxZ
+        ) {
+          preCollapsedCells.push({
+            x: worldX - bounds.minX, // Convert to buffer-local coordinates
+            y: worldY - bounds.minY,
+            z: worldZ - bounds.minZ,
+            tileId,
+          });
+        }
+      }
+    }
+
+    const workerCount = this.workerPool.getWorkerCount();
+    console.log(
+      `Running collapse on ${width}x${height}x${depth} region with ${preCollapsedCells.length} pre-collapsed cells`
     );
+    console.log(`Worker pool: ${workerCount} workers available`);
+
+    // Start performance timer
+    const startTime = performance.now();
+
+    // Create set of cells to enable for fast lookup
+    const cellsToEnableSet =
+      cellsToEnable !== null
+        ? new Set(cellsToEnable.map(([x, y, z]) => this.coordToKey(x, y, z)))
+        : null;
+
+    try {
+      let result: string[][][];
+
+      // Use region-based parallelization for multiple workers
+      if (workerCount > 1) {
+        console.log(
+          `Using region-based parallelization with ${workerCount} workers`
+        );
+
+        result = await generateWithWorkers(
+          width,
+          height,
+          depth,
+          prepareTilesForWorker(this.tiles),
+          this.workerPool,
+          seed,
+          options.onProgress,
+          (x: number, y: number, z: number, tileId: string) => {
+            // Convert buffer-local coordinates to world coordinates
+            const worldX = x + bounds.minX;
+            const worldY = y + bounds.minY;
+            const worldZ = z + bounds.minZ;
+            const key = this.coordToKey(worldX, worldY, worldZ);
+
+            // Update internal sparse grid
+            internalGrid.set(key, tileId);
+
+            // Check if this cell should be rendered
+            const shouldRender =
+              cellsToEnableSet === null || cellsToEnableSet.has(key);
+
+            if (shouldRender) {
+              // Render tile in real-time
+              if (this.renderer) {
+                this.renderer.addTileInstance(tileId, worldX, worldY, worldZ);
+              }
+              // Mark as enabled
+              this.enabledCells.add(key);
+            }
+
+            // Call user callback
+            if (options.onTileUpdate) {
+              options.onTileUpdate(worldX, worldY, worldZ, tileId);
+            }
+          }
+        );
+      } else {
+        // Single worker - use direct task execution
+        console.log(`Using single worker execution`);
+
+        result = await this.workerPool.executeTask({
+          id: `collapse_${Date.now()}_${Math.random()}`,
+          message: {
+            type: "generate",
+            width,
+            height,
+            depth,
+            tiles: prepareTilesForWorker(this.tiles),
+            seed,
+            preCollapsedCells,
+          },
+          onTileUpdate: (x: number, y: number, z: number, tileId: string) => {
+            // Convert buffer-local coordinates to world coordinates
+            const worldX = x + bounds.minX;
+            const worldY = y + bounds.minY;
+            const worldZ = z + bounds.minZ;
+            const key = this.coordToKey(worldX, worldY, worldZ);
+
+            // Update internal sparse grid
+            internalGrid.set(key, tileId);
+
+            // Check if this cell should be rendered
+            const shouldRender =
+              cellsToEnableSet === null || cellsToEnableSet.has(key);
+
+            if (shouldRender) {
+              // Render tile in real-time
+              if (this.renderer) {
+                this.renderer.addTileInstance(tileId, worldX, worldY, worldZ);
+              }
+              // Mark as enabled
+              this.enabledCells.add(key);
+            }
+
+            // Call user callback
+            if (options.onTileUpdate) {
+              options.onTileUpdate(worldX, worldY, worldZ, tileId);
+            }
+          },
+        });
+      }
+
+      // Convert array response to sparse map (with world coordinates)
+      // Only add cells that should be included based on cellsToEnable
+      const resultMap = this.createEmptyMap();
+      for (let x = 0; x < result.length; x++) {
+        for (let y = 0; y < result[x].length; y++) {
+          for (let z = 0; z < result[x][y].length; z++) {
+            const tileId = result[x][y][z];
+            if (tileId) {
+              const worldX = x + bounds.minX;
+              const worldY = y + bounds.minY;
+              const worldZ = z + bounds.minZ;
+              const key = this.coordToKey(worldX, worldY, worldZ);
+
+              // Only add cells that:
+              // 1. Were in cellsToEnable (new expansion cells or cells being made visible)
+              // 2. OR already existed in the grid (pre-collapsed cells)
+              const shouldInclude =
+                cellsToEnableSet === null || // If null, include all cells
+                cellsToEnableSet.has(key) || // Cell is in expansion region
+                (this.grid && this.grid.has(key)); // Cell already existed
+
+              if (shouldInclude) {
+                resultMap.set(key, tileId);
+              }
+            }
+          }
+        }
+      }
+
+      // End performance timer
+      const endTime = performance.now();
+      const duration = endTime - startTime;
+      const totalCells = width * height * depth;
+      const cellsPerSecond = (totalCells / (duration / 1000)).toFixed(0);
+
+      console.log(
+        `Collapse complete: ${resultMap.size} cells kept from ${totalCells} buffer cells`
+      );
+      console.log(
+        `⏱️  Performance: ${duration.toFixed(
+          2
+        )}ms (${cellsPerSecond} cells/sec) using ${this.workerPool.getWorkerCount()} workers`
+      );
+
+      // Update debug UI with performance stats
+      if (this.debugUI) {
+        this.debugUI.showProgress(
+          `✓ Complete in ${duration.toFixed(
+            0
+          )}ms (${this.workerPool.getWorkerCount()} workers)`
+        );
+        setTimeout(() => this.debugUI?.hideProgress(), 3000);
+      }
+
+      return resultMap;
+    } catch (error) {
+      const err: any = error;
+      const endTime = performance.now();
+      const duration = endTime - startTime;
+      console.error(
+        `❌ Collapse failed after ${duration.toFixed(2)}ms:`,
+        err.message
+      );
+      throw new Error(`Collapse failed: ${err.message || "Unknown error"}`);
+    }
   }
 
   /**
@@ -278,18 +445,6 @@ export class WFCGenerator {
    */
   private createEmptyMap(): Map<string, string> {
     return new Map();
-  }
-
-  /**
-   * Copy data from source map to destination map
-   */
-  private copyMapData(
-    source: Map<string, string>,
-    destination: Map<string, string>
-  ): void {
-    for (const [key, value] of source.entries()) {
-      destination.set(key, value);
-    }
   }
 
   /**
@@ -305,140 +460,6 @@ export class WFCGenerator {
   private keyToCoord(key: string): [number, number, number] {
     const parts = key.split(",").map(Number);
     return [parts[0], parts[1], parts[2]];
-  }
-
-  /**
-   * Run a worker task with common message handling logic
-   */
-  private async runWorkerTask(
-    internalGrid: Map<string, string>,
-    options: GenerateOptions | ExpandOptions,
-    workerMessage: any,
-    errorMessage: string
-  ): Promise<Map<string, string>> {
-    // Create worker if not exists
-    if (!this.worker) {
-      this.worker = new Worker(new URL("../wfc.worker.ts", import.meta.url), {
-        type: "module",
-      });
-    }
-
-    return new Promise<Map<string, string>>((resolve, reject) => {
-      if (!this.worker) {
-        return reject(new Error("Worker not initialized"));
-      }
-
-      this.worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
-        const message = e.data;
-
-        if (message.type === "progress") {
-          // Update internal UI
-          this.debugUI?.setProgress(message.progress * 100);
-
-          // Call user callback
-          if (options.onProgress) {
-            options.onProgress(message.progress);
-          }
-        } else if (message.type === "tile_update") {
-          // Real-time tile update
-          const { x, y, z, tileId } = message;
-
-          // Update internal sparse grid
-          const key = this.coordToKey(x, y, z);
-          internalGrid.set(key, tileId);
-
-          // Render tile in real-time
-          if (this.renderer) {
-            this.renderer.addTileInstance(tileId, x, y, z);
-          }
-
-          // Call user callback
-          if (options.onTileUpdate) {
-            options.onTileUpdate(x, y, z, tileId);
-          }
-        } else if (message.type === "complete") {
-          if (message.success && message.data) {
-            // Convert array response to sparse map
-            const resultMap = this.arrayToMap(message.data);
-            resolve(resultMap);
-          } else {
-            reject(new Error(errorMessage));
-          }
-        } else if (message.type === "error") {
-          const error: any = new Error(message.message);
-          if (message.error) {
-            error.wfcError = message.error;
-          }
-          reject(error);
-        }
-      };
-
-      this.worker.onerror = (error: ErrorEvent) => {
-        reject(new Error(`Worker error: ${error.message}`));
-      };
-
-      // Send worker request
-      this.worker.postMessage(workerMessage);
-    });
-  }
-
-  /**
-   * Serialize grid into buffer format for expansion
-   */
-  private serializeBuffer(
-    grid: Map<string, string>,
-    width: number,
-    height: number,
-    depth: number
-  ): SerializedBuffer {
-    const buffer = {
-      width,
-      height,
-      depth,
-      cellData: [] as Array<{
-        x: number;
-        y: number;
-        z: number;
-        collapsed: boolean;
-        tileId: string;
-        possibleTiles: string[];
-      }>,
-    };
-
-    for (const [key, tileId] of grid.entries()) {
-      const [x, y, z] = this.keyToCoord(key);
-      buffer.cellData.push({
-        x,
-        y,
-        z,
-        collapsed: true,
-        tileId,
-        possibleTiles: [tileId],
-      });
-    }
-
-    return buffer;
-  }
-
-  /**
-   * Convert 3D array to sparse map
-   */
-  private arrayToMap(grid: string[][][]): Map<string, string> {
-    const map = new Map<string, string>();
-
-    for (let x = 0; x < grid.length; x++) {
-      for (let y = 0; y < grid[x].length; y++) {
-        for (let z = 0; z < grid[x][y].length; z++) {
-          const tileId = grid[x][y][z];
-          if (tileId) {
-            const key = this.coordToKey(x, y, z);
-            map.set(key, tileId);
-          }
-        }
-      }
-    }
-
-    return map;
   }
 
   /**
@@ -488,29 +509,50 @@ export class WFCGenerator {
     this.debugUI?.showProgress("Expanding grid...");
     this.debugUI?.setProgress(0);
 
-    // Calculate expansion amounts
-    const expansions = {
-      xMin: 0,
-      xMax: Math.max(0, newWidth - this.width),
-      yMin: 0,
-      yMax: Math.max(0, newHeight - this.height),
-      zMin: 0,
-      zMax: Math.max(0, newDepth - this.depth),
-    };
-
-    // Check if we're actually expanding
-    if (
-      expansions.xMax === 0 &&
-      expansions.yMax === 0 &&
-      expansions.zMax === 0
-    ) {
-      // No expansion needed, just return current grid
-      this.debugUI?.hideProgress();
-      return this.grid!;
-    }
-
     try {
-      const result = await this.runExpansion(expansions, seed, options);
+      // For expand() from UI, we want the grid to remain at origin (0,0,0)
+      // and expand to the new dimensions
+      const targetMinX = 0;
+      const targetMaxX = newWidth;
+      const targetMinY = 0;
+      const targetMaxY = newHeight;
+      const targetMinZ = 0;
+      const targetMaxZ = newDepth;
+
+      // Identify new cells that need to be collapsed
+      const newCells: Array<[number, number, number]> = [];
+      for (let x = targetMinX; x < targetMaxX; x++) {
+        for (let y = targetMinY; y < targetMaxY; y++) {
+          for (let z = targetMinZ; z < targetMaxZ; z++) {
+            const key = this.coordToKey(x, y, z);
+            if (!this.grid!.has(key)) {
+              newCells.push([x, y, z]);
+            }
+          }
+        }
+      }
+
+      if (newCells.length === 0) {
+        // No new cells to add
+        this.debugUI?.hideProgress();
+        return this.grid!;
+      }
+
+      // Use unified collapse with padding
+      const PADDING = 2;
+      const result = await this.runCollapse(
+        {
+          minX: targetMinX - PADDING,
+          maxX: targetMaxX + PADDING,
+          minY: targetMinY - PADDING,
+          maxY: targetMaxY + PADDING,
+          minZ: targetMinZ - PADDING,
+          maxZ: targetMaxZ + PADDING,
+        },
+        newCells, // Only render new cells
+        seed,
+        options
+      );
 
       // Update stored state
       this.width = newWidth;
@@ -521,31 +563,25 @@ export class WFCGenerator {
       // Update grid bounds
       this.updateGridBounds();
 
-      // Update debug grid
+      // Update debug grid (use target bounds for UI-driven expansion)
       if (this.debugGrid) {
-        const bounds = this.getGridBounds();
         this.debugGrid.updateGrid(
           newWidth,
           newHeight,
           newDepth,
-          bounds.minX,
-          bounds.minY,
-          bounds.minZ
+          0, // Grid starts at origin for UI-driven expansion
+          0,
+          0
         );
       }
 
-      // Render the expanded result
-      if (this.renderer) {
-        this.renderer.render(result);
-
-        // Show completion
-        const stats = this.renderer.getStats();
-        this.debugUI?.showProgress(
-          `Complete! ${stats.totalInstances} instances, ${stats.tileTypes} types`
-        );
-        this.debugUI?.setProgress(100);
-        setTimeout(() => this.debugUI?.hideProgress(), 2000);
-      }
+      // Show completion
+      const stats = this.renderer.getStats();
+      this.debugUI?.showProgress(
+        `Complete! ${stats.totalInstances} instances, ${stats.tileTypes} types`
+      );
+      this.debugUI?.setProgress(100);
+      setTimeout(() => this.debugUI?.hideProgress(), 2000);
 
       // Trigger completion callbacks
       this.triggerCompleteCallbacks();
@@ -595,10 +631,15 @@ export class WFCGenerator {
     const shrunkGrid = new Map<string, string>();
 
     // Copy only the cells within the new dimensions
+    // Also update enabledCells
+    const newEnabledCells = new Set<string>();
     for (const [key, tileId] of this.grid!.entries()) {
       const [x, y, z] = this.keyToCoord(key);
       if (x < newWidth && y < newHeight && z < newDepth) {
         shrunkGrid.set(key, tileId);
+        if (this.enabledCells.has(key)) {
+          newEnabledCells.add(key);
+        }
       }
     }
 
@@ -607,24 +648,24 @@ export class WFCGenerator {
     this.height = newHeight;
     this.depth = newDepth;
     this.grid = shrunkGrid;
+    this.enabledCells = newEnabledCells;
 
     // Update grid bounds
     this.updateGridBounds();
 
-    // Update debug grid
+    // Update debug grid (use origin for UI-driven shrink)
     if (this.debugGrid) {
-      const bounds = this.getGridBounds();
       this.debugGrid.updateGrid(
         newWidth,
         newHeight,
         newDepth,
-        bounds.minX,
-        bounds.minY,
-        bounds.minZ
+        0, // Grid starts at origin for UI-driven shrink
+        0,
+        0
       );
     }
 
-    this.renderer.render(shrunkGrid);
+    this.renderer.render(shrunkGrid, this.enabledCells);
 
     return shrunkGrid;
   }
@@ -641,6 +682,7 @@ export class WFCGenerator {
    */
   reset(): void {
     this.grid = null;
+    this.enabledCells.clear();
     this.renderer.clear();
   }
 
@@ -723,13 +765,23 @@ export class WFCGenerator {
     expansionX: number,
     expansionY: number,
     expansionZ: number,
-    _options: ExpandOptions = {}
+    options: ExpandOptions = {}
   ): Promise<Map<string, string>> {
-    if (!this.canExpand()) {
-      throw new Error("Cannot expand: no existing grid");
+    // Ensure models are loaded before expansion
+    await this.ensureTilesetLoaded();
+
+    // Initialize grid if it doesn't exist
+    const isNewGrid = !this.grid || this.grid.size === 0;
+    if (!this.grid) {
+      console.log("No existing grid - creating new grid at specified location");
+      this.grid = this.createEmptyMap();
     }
 
-    this.debugUI?.showProgress("Expanding from cell...");
+    if (isNewGrid) {
+      this.debugUI?.showProgress("Creating new grid at cell...");
+    } else {
+      this.debugUI?.showProgress("Expanding from cell...");
+    }
     this.debugUI?.setProgress(0);
 
     // Calculate expansion region centered on cell
@@ -744,23 +796,45 @@ export class WFCGenerator {
     const minZ = cellZ - halfExpZ;
     const maxZ = cellZ + halfExpZ + (expansionZ % 2);
 
-    // Collect new cells to add (skip existing cells)
-    const newCells: Array<[number, number, number]> = [];
+    // Collect cells in the expansion region
+    const newCells: Array<[number, number, number]> = []; // Cells that need to be collapsed
+    const hiddenCells: Array<[number, number, number]> = []; // Cells that exist but aren't visible
+
     for (let x = minX; x < maxX; x++) {
       for (let y = minY; y < maxY; y++) {
         for (let z = minZ; z < maxZ; z++) {
           const key = this.coordToKey(x, y, z);
           if (!this.grid!.has(key)) {
-            // This is a new cell, add it
+            // This is a new cell that needs to be collapsed
             newCells.push([x, y, z]);
-            // Add to grid as empty for now (will be collapsed by WFC)
-            this.grid!.set(key, "");
+          } else if (!this.enabledCells.has(key)) {
+            // This cell exists but is hidden - make it visible
+            hiddenCells.push([x, y, z]);
           }
-          // If cell already exists, skip it (use as constraint)
         }
       }
     }
 
+    // If there are only hidden cells (no new cells), just enable them and re-render
+    if (newCells.length === 0 && hiddenCells.length > 0) {
+      console.log(`Making ${hiddenCells.length} hidden cells visible`);
+
+      for (const [x, y, z] of hiddenCells) {
+        const key = this.coordToKey(x, y, z);
+        this.enabledCells.add(key);
+      }
+
+      // Re-render with updated enabled cells
+      this.renderer.render(this.grid!, this.enabledCells);
+
+      this.debugUI?.showProgress(`Made ${hiddenCells.length} cells visible`);
+      this.debugUI?.setProgress(100);
+      setTimeout(() => this.debugUI?.hideProgress(), 2000);
+
+      return this.grid!;
+    }
+
+    // If there are no new cells and no hidden cells, nothing to do
     if (newCells.length === 0) {
       this.debugUI?.showProgress("No new cells to expand");
       this.debugUI?.setProgress(100);
@@ -768,106 +842,70 @@ export class WFCGenerator {
       return this.grid!;
     }
 
+    // Include hidden cells in the cells to enable (make them visible too)
+    const cellsToEnable = [...newCells, ...hiddenCells];
+
     console.log(
-      `Expanding ${newCells.length} new cells from (${cellX}, ${cellY}, ${cellZ})`
+      `Expanding ${
+        newCells.length
+      } new cells from (${cellX}, ${cellY}, ${cellZ})${
+        hiddenCells.length > 0
+          ? ` + making ${hiddenCells.length} hidden cells visible`
+          : ""
+      }`
     );
     console.log(
       `Expansion region: X[${minX},${maxX}), Y[${minY},${maxY}), Z[${minZ},${maxZ})`
     );
 
-    // Calculate bounds for the WFC buffer (includes existing + new cells)
+    // Add padding buffer around expansion region for continuity
+    const PADDING = 2;
+
+    // Get grid bounds (will be initial dimensions if grid is empty)
     const bounds = this.getGridBounds();
-    const bufferMinX = Math.min(bounds.minX, minX);
-    const bufferMaxX = Math.max(bounds.maxX, maxX - 1);
-    const bufferMinY = Math.min(bounds.minY, minY);
-    const bufferMaxY = Math.max(bounds.maxY, maxY - 1);
-    const bufferMinZ = Math.min(bounds.minZ, minZ);
-    const bufferMaxZ = Math.max(bounds.maxZ, maxZ - 1);
 
-    const bufferWidth = bufferMaxX - bufferMinX + 1;
-    const bufferHeight = bufferMaxY - bufferMinY + 1;
-    const bufferDepth = bufferMaxZ - bufferMinZ + 1;
-
-    const totalBufferCells = bufferWidth * bufferHeight * bufferDepth;
-    console.log(
-      `Creating WFC buffer: ${bufferWidth}x${bufferHeight}x${bufferDepth} (${totalBufferCells} cells total)`
-    );
-
-    // Convert tiles to WFCTile3D instances
-    const wfcTiles = this.tiles.map((config) => new WFCTile3D(config));
-
-    // Create WFC buffer with all cells (existing + new)
-    const buffer = new WFC3DBuffer(
-      bufferWidth,
-      bufferHeight,
-      bufferDepth,
-      wfcTiles
-    );
-
-    // Pre-collapse existing cells to constrain the WFC algorithm
-    let constrainedCells = 0;
-    for (const [key, tileId] of this.grid!.entries()) {
-      if (!tileId) continue; // Skip empty cells
-      const [worldX, worldY, worldZ] = this.keyToCoord(key);
-      const bufferX = worldX - bufferMinX;
-      const bufferY = worldY - bufferMinY;
-      const bufferZ = worldZ - bufferMinZ;
-
-      const cell = buffer.getCell(bufferX, bufferY, bufferZ);
-      if (cell && !cell.collapsed) {
-        cell.collapse(tileId);
-        constrainedCells++;
-      }
-    }
+    // If grid is empty, just use the expansion region with padding
+    const isGridEmpty = this.grid.size === 0;
+    const bufferMinX = isGridEmpty
+      ? minX - PADDING
+      : Math.min(bounds.minX, minX - PADDING);
+    const bufferMaxX = isGridEmpty
+      ? maxX + PADDING
+      : Math.max(bounds.maxX + 1, maxX + PADDING);
+    const bufferMinY = isGridEmpty
+      ? minY - PADDING
+      : Math.min(bounds.minY, minY - PADDING);
+    const bufferMaxY = isGridEmpty
+      ? maxY + PADDING
+      : Math.max(bounds.maxY + 1, maxY + PADDING);
+    const bufferMinZ = isGridEmpty
+      ? minZ - PADDING
+      : Math.min(bounds.minZ, minZ - PADDING);
+    const bufferMaxZ = isGridEmpty
+      ? maxZ + PADDING
+      : Math.max(bounds.maxZ + 1, maxZ + PADDING);
 
     console.log(
-      `Pre-collapsed ${constrainedCells} existing cells as constraints`
+      `Collapse buffer with padding: X[${bufferMinX},${bufferMaxX}), Y[${bufferMinY},${bufferMaxY}), Z[${bufferMinZ},${bufferMaxZ})`
     );
 
-    // Create a Set of new cell coordinates for fast lookup
-    const newCellsSet = new Set(
-      newCells.map(([x, y, z]) => this.coordToKey(x, y, z))
-    );
-    console.log(
-      `Will only add ${newCellsSet.size} cells from expansion region`
-    );
-
-    // Run WFC on the buffer (will collapse all cells, but we only add expansion cells)
-    this.debugUI?.showProgress("Running WFC on new cells...");
-    const wfc = new WFC3D({
-      width: bufferWidth,
-      height: bufferHeight,
-      depth: bufferDepth,
-      tiles: wfcTiles,
-      seed: this.seed,
-    });
-    wfc.buffer = buffer; // Use our pre-constrained buffer
-
-    const success = await wfc.generate(
-      (progress) => this.debugUI?.setProgress(progress * 100),
-      (x, y, z, tileId) => {
-        // Convert back to world coordinates
-        const worldX = x + bufferMinX;
-        const worldY = y + bufferMinY;
-        const worldZ = z + bufferMinZ;
-        const key = this.coordToKey(worldX, worldY, worldZ);
-
-        // Only add cells that are in the expansion region
-        if (newCellsSet.has(key)) {
-          this.grid!.set(key, tileId);
-        }
-      }
+    // Use unified collapse method
+    const result = await this.runCollapse(
+      {
+        minX: bufferMinX,
+        maxX: bufferMaxX,
+        minY: bufferMinY,
+        maxY: bufferMaxY,
+        minZ: bufferMinZ,
+        maxZ: bufferMaxZ,
+      },
+      cellsToEnable, // Render both new cells and previously hidden cells
+      this.seed,
+      options
     );
 
-    if (!success) {
-      const error = wfc.lastError;
-      console.error("WFC failed during expansion:", error);
-      this.debugUI?.showProgress("Expansion failed!");
-      setTimeout(() => this.debugUI?.hideProgress(), 3000);
-      throw new Error(
-        `WFC expansion failed: ${error?.message || "Unknown error"}`
-      );
-    }
+    // Update grid with result
+    this.grid = result;
 
     // Count what was added by tile type
     const tileCounts = new Map<string, number>();
@@ -891,29 +929,38 @@ export class WFCGenerator {
     // Update grid bounds
     this.updateGridBounds();
 
+    // Update dimensions based on new bounds
+    const newBounds = this.getGridBounds();
+    this.width = newBounds.maxX - newBounds.minX + 1;
+    this.height = newBounds.maxY - newBounds.minY + 1;
+    this.depth = newBounds.maxZ - newBounds.minZ + 1;
+
     // Update debug grid to show new bounds
     if (this.debugGrid) {
-      const newBounds = this.getGridBounds();
       this.debugGrid.updateGrid(
-        newBounds.maxX - newBounds.minX + 1,
-        newBounds.maxY - newBounds.minY + 1,
-        newBounds.maxZ - newBounds.minZ + 1,
+        this.width,
+        this.height,
+        this.depth,
         newBounds.minX,
         newBounds.minY,
         newBounds.minZ
       );
     }
 
-    // Render the expanded grid
-    this.renderer.render(this.grid!);
-
     const summary = Array.from(tileCounts.entries())
       .map(([id, count]) => `${id}(${count})`)
       .join(", ");
 
-    this.debugUI?.showProgress(
-      `Expanded ${actuallyAddedCount} cells: ${summary}`
-    );
+    let message: string;
+    if (isNewGrid) {
+      message = `Created ${actuallyAddedCount} cells: ${summary}`;
+    } else if (hiddenCells.length > 0) {
+      message = `Expanded ${actuallyAddedCount} cells + made ${hiddenCells.length} visible: ${summary}`;
+    } else {
+      message = `Expanded ${actuallyAddedCount} cells: ${summary}`;
+    }
+
+    this.debugUI?.showProgress(message);
     this.debugUI?.setProgress(100);
     setTimeout(() => this.debugUI?.hideProgress(), 4000);
 
@@ -999,6 +1046,7 @@ export class WFCGenerator {
         for (let z = minZ; z < maxZ; z++) {
           const key = this.coordToKey(x, y, z);
           this.grid!.delete(key);
+          this.enabledCells.delete(key);
         }
       }
     }
@@ -1020,7 +1068,7 @@ export class WFCGenerator {
     }
 
     // Re-render
-    this.renderer.render(this.grid!);
+    this.renderer.render(this.grid!, this.enabledCells);
 
     return this.grid!;
   }
@@ -1065,7 +1113,7 @@ export class WFCGenerator {
 
       // Re-render with new cell size if we have a grid
       if (this.grid) {
-        this.renderer.render(this.grid);
+        this.renderer.render(this.grid, this.enabledCells);
       }
     }
   }
@@ -1107,6 +1155,21 @@ export class WFCGenerator {
     maxZ: number;
   } {
     return { ...this.gridBounds };
+  }
+
+  /**
+   * Ensure tileset models are loaded before operations that need them
+   */
+  private async ensureTilesetLoaded(): Promise<void> {
+    if (!this.renderer.hasModelsLoaded()) {
+      console.log("Models not loaded yet - loading tileset...");
+      this.debugUI?.showProgress("Loading GLB models...");
+      this.debugUI?.setProgress(0);
+      const modelData = await this.loader.loadTileset(this.tiles);
+      this.renderer.updateTileset(modelData);
+      this.debugUI?.setProgress(10);
+      console.log("Tileset loaded successfully");
+    }
   }
 
   /**
@@ -1190,14 +1253,35 @@ export class WFCGenerator {
   }
 
   /**
+   * Get the number of workers in the pool
+   */
+  getWorkerCount(): number {
+    return this.workerPool.getWorkerCount();
+  }
+
+  /**
+   * Set the number of workers in the pool (recreates pool)
+   */
+  setWorkerCount(count: number): void {
+    const maxWorkers = navigator.hardwareConcurrency || 4;
+    const validCount = Math.min(Math.max(1, count), maxWorkers);
+
+    console.log(
+      `Recreating worker pool with ${validCount} workers (max: ${maxWorkers})`
+    );
+
+    // Terminate existing pool
+    this.workerPool.terminate();
+
+    // Create new pool with specified count
+    this.workerPool = new WorkerPool(validCount);
+  }
+
+  /**
    * Terminate all workers and clean up
    */
   dispose(): void {
     this.workerPool.terminate();
-    if (this.worker) {
-      this.worker.terminate();
-      this.worker = null;
-    }
     if (this.debugGrid) this.debugGrid.dispose();
     if (this.renderer) {
       this.renderer.clear();

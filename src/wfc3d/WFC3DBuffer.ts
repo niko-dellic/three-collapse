@@ -1,12 +1,22 @@
 import { WFCTile3D } from "./WFCTile3D";
 
 /**
+ * Cell state for tracking collapse progress
+ */
+export enum CellState {
+  UNCOLLAPSED = 0,
+  COLLAPSING = 1,
+  COLLAPSED = 2,
+}
+
+/**
  * Cell in the 3D grid that tracks possible tile states
  */
 class Cell {
   possibleTiles: Set<string>;
   collapsed: boolean;
   tileId: string | null;
+  state: CellState = CellState.UNCOLLAPSED;
 
   constructor(tileIds: string[]) {
     this.possibleTiles = new Set(tileIds);
@@ -24,6 +34,7 @@ class Cell {
     this.tileId = tileId;
     this.possibleTiles.clear();
     this.possibleTiles.add(tileId);
+    this.state = CellState.COLLAPSED;
   }
 
   constrain(allowedTiles: Set<string>): boolean {

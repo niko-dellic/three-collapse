@@ -5,6 +5,7 @@ export {
 } from "./WFCTile3D";
 export {
   WFC3DBuffer,
+  CellState,
   type SerializedBuffer,
   type SerializedCell,
 } from "./WFC3DBuffer";

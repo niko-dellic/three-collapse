@@ -208,7 +208,7 @@ export class WFC3D {
   /**
    * Propagate constraints after a cell is collapsed
    */
-  private propagate(startX: number, startY: number, startZ: number): boolean {
+  propagate(startX: number, startY: number, startZ: number): boolean {
     const stack: [number, number, number][] = [[startX, startY, startZ]];
 
     while (stack.length > 0) {
@@ -273,6 +273,34 @@ export class WFC3D {
     }
 
     return true;
+  }
+
+  /**
+   * Collapse a specific cell and propagate constraints
+   * Returns the selected tileId or null if contradiction
+   * Used by workers to collapse assigned cells
+   */
+  collapseCell(x: number, y: number, z: number): string | null {
+    const cell = this.buffer.getCell(x, y, z);
+
+    if (!cell || cell.collapsed || cell.possibleTiles.size === 0) {
+      return null;
+    }
+
+    // Select tile based on weighted random
+    const tileId = this.selectTile(x, y, z);
+
+    if (!tileId) {
+      return null;
+    }
+
+    // Collapse the cell
+    cell.collapse(tileId);
+
+    // Propagate constraints
+    const success = this.propagate(x, y, z);
+
+    return success ? tileId : null;
   }
 
   /**

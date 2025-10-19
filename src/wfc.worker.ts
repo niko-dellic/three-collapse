@@ -22,6 +22,7 @@ interface GenerateMessage {
     zMin: number;
     zMax: number;
   };
+  assignedCells?: Array<[number, number, number]>; // NEW: Specific cells to collapse
   preCollapsedCells?: Array<{
     x: number;
     y: number;
@@ -89,7 +90,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         seed: message.seed,
       });
 
-      // Apply pre-collapsed cells if provided
+      // Apply pre-collapsed cells if provided (boundaries)
       if (message.preCollapsedCells) {
         for (const cellData of message.preCollapsedCells) {
           const cell = wfc.buffer.getCell(cellData.x, cellData.y, cellData.z);
@@ -99,26 +100,73 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         }
       }
 
-      // Run generation with progress and tile updates
-      const success = await wfc.generate(
-        (progress) => {
-          const progressMsg: ProgressMessage = {
-            type: "progress",
-            progress,
-          };
-          self.postMessage(progressMsg);
-        },
-        (x, y, z, tileId) => {
-          const tileMsg: TileUpdateMessage = {
-            type: "tile_update",
-            x,
-            y,
-            z,
-            tileId,
-          };
-          self.postMessage(tileMsg);
+      let success: boolean;
+
+      // If assignedCells provided, only collapse those specific cells
+      if (message.assignedCells && message.assignedCells.length > 0) {
+        const totalCells = message.assignedCells.length;
+        let collapsedCount = 0;
+
+        // Collapse only assigned cells
+        for (const [x, y, z] of message.assignedCells) {
+          const cell = wfc.buffer.getCell(x, y, z);
+
+          if (!cell || cell.collapsed) {
+            collapsedCount++;
+            continue;
+          }
+
+          // Collapse this specific cell
+          const tileId = wfc.collapseCell(x, y, z);
+
+          if (tileId) {
+            collapsedCount++;
+
+            // Send tile update
+            const tileMsg: TileUpdateMessage = {
+              type: "tile_update",
+              x,
+              y,
+              z,
+              tileId,
+            };
+            self.postMessage(tileMsg);
+
+            // Send progress
+            const progressMsg: ProgressMessage = {
+              type: "progress",
+              progress: collapsedCount / totalCells,
+            };
+            self.postMessage(progressMsg);
+          } else {
+            // Contradiction - this shouldn't happen with proper boundaries
+            throw new Error(`Contradiction at (${x}, ${y}, ${z})`);
+          }
         }
-      );
+
+        success = true;
+      } else {
+        // Fallback: run normal generate (for single worker case)
+        success = await wfc.generate(
+          (progress) => {
+            const progressMsg: ProgressMessage = {
+              type: "progress",
+              progress,
+            };
+            self.postMessage(progressMsg);
+          },
+          (x, y, z, tileId) => {
+            const tileMsg: TileUpdateMessage = {
+              type: "tile_update",
+              x,
+              y,
+              z,
+              tileId,
+            };
+            self.postMessage(tileMsg);
+          }
+        );
+      }
 
       if (success) {
         // Extract result data (only for the region if specified)

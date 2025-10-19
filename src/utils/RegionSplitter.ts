@@ -163,3 +163,28 @@ export function getBoundaryCells(
     return [x, y, z] as [number, number, number];
   });
 }
+
+/**
+ * Get interior cells for a region (excluding boundaries)
+ * This is used to assign specific cells to workers
+ */
+export function getCellsForRegion(
+  region: Region3D,
+  allBoundaries: Set<string>
+): Array<[number, number, number]> {
+  const cells: Array<[number, number, number]> = [];
+
+  for (let x = region.xMin; x < region.xMax; x++) {
+    for (let y = region.yMin; y < region.yMax; y++) {
+      for (let z = region.zMin; z < region.zMax; z++) {
+        const key = `${x},${y},${z}`;
+        // Skip if this cell is a boundary
+        if (!allBoundaries.has(key)) {
+          cells.push([x, y, z]);
+        }
+      }
+    }
+  }
+
+  return cells;
+}
