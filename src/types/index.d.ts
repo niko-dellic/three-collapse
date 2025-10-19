@@ -91,3 +91,37 @@ export type WorkerResponse =
   | TileUpdateMessage
   | CompleteMessage
   | ErrorMessage;
+
+/**
+ * Instance data for a single tile placement
+ */
+export interface TileInstance {
+  tileId: string;
+  x: number;
+  y: number;
+  z: number;
+  rotation?: number; // Rotation in radians (for future use)
+}
+
+/**
+ * Transform overrides for a tile type
+ */
+export interface TileTransformOverride {
+  position?: THREE.Vector3;
+  rotation?: THREE.Euler;
+  scale?: THREE.Vector3;
+}
+
+export interface SerializedBuffer {
+  width: number;
+  height: number;
+  depth: number;
+  cellData: {
+    x: number;
+    y: number;
+    z: number;
+    collapsed: boolean;
+    tileId: string;
+    possibleTiles: string[];
+  }[];
+}

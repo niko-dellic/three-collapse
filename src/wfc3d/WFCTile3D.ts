@@ -85,7 +85,7 @@ export interface BaseTile3DConfig {
  * Model-based tile configuration with GLB file support or custom geometry
  */
 export interface ModelTile3DConfig extends BaseTile3DConfig {
-  model: string | (() => THREE.Object3D); // path to GLB file OR function that returns a Three.js object
+  model: string | (() => THREE.Object3D) | THREE.Object3D; // path to GLB file OR function that returns a Three.js object OR Three.js object
   material?: THREE.Material | THREE.Material[]; // optional material override for the loaded model
   position?: THREE.Vector3 | { x?: number; y?: number; z?: number }; // optional position offset from grid
   rotation?: THREE.Euler | { x?: number; y?: number; z?: number }; // optional rotation in radians

@@ -283,7 +283,7 @@ export function gltfObjectToTiles(
     // Build the config
     const config: ModelTile3DConfig = {
       id: tileId,
-      model: () => mesh,
+      model: mesh,
       weight,
       adjacency,
     };

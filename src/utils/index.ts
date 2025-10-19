@@ -40,18 +40,7 @@ export {
   type ValidationResult,
 } from "./TilesetValidator";
 
-export {
-  DebugUI,
-  showProgress,
-  hideProgress,
-  setProgress,
-  setProgressColor,
-  type DebugUIConfig,
-  type DemoUIConfig,
-  type DemoUIElements,
-  type DemoInstance,
-  type TileTransform,
-} from "./debugUI";
+export { DebugUI, type DebugUIElements, type TileTransform } from "./debugUI";
 
 export { DebugGrid } from "./DebugGrid";
 

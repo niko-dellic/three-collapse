@@ -3,7 +3,6 @@
  */
 import GUI from "lil-gui";
 import * as THREE from "three";
-import type { BaseTile3DConfig } from "../wfc3d/WFCTile3D";
 import type { WFCGenerator } from "../generators/WFCGenerator";
 import {
   createTilesetEditor,
@@ -12,44 +11,7 @@ import {
 } from "./TilesetEditor";
 import debugUIStyles from "./debugUI.css?inline";
 
-/**
- * Interface defining what properties/methods a demo instance needs to work with the debug UI
- */
-export interface DemoInstance {
-  // Grid properties
-  width: number;
-  height: number;
-  depth: number;
-  cellSize?: number;
-  previousWidth: number;
-  previousHeight: number;
-  previousDepth: number;
-
-  // Generation properties
-  currentSeed: number;
-  tiles: BaseTile3DConfig[];
-  isLoading?: boolean;
-
-  // Mode properties (these are read-only for the UI)
-  expansionMode: boolean;
-  useWorkers: boolean;
-  workerCount: number;
-
-  // Generator access - single source of truth
-  getGenerator: () => WFCGenerator | null;
-
-  // Optional custom generation logic (if demo needs special handling)
-  onGenerate?: (isExpansion?: boolean) => Promise<void>;
-}
-
-/**
- * Configuration for the debug UI
- */
-export interface DebugUIConfig {
-  demo: DemoInstance;
-}
-
-export interface DemoUIElements {
+export interface DebugUIElements {
   gui: GUI;
   gridFolder: GUI;
   progressElement?: HTMLDivElement;
@@ -57,9 +19,6 @@ export interface DemoUIElements {
 }
 
 export type { TileTransform };
-
-// Legacy type alias for backward compatibility
-export type DemoUIConfig = DebugUIConfig;
 
 /**
  * Debug UI class for WFC demos
@@ -79,7 +38,7 @@ export class DebugUI {
 
   private static stylesInjected = false;
 
-  constructor(generator: WFCGenerator) {
+  constructor(generator: WFCGenerator, container: HTMLElement = document.body) {
     this.generator = generator;
 
     // Initialize with generator's current dimensions if available
@@ -96,6 +55,7 @@ export class DebugUI {
 
     this.gui = new GUI({
       width: 300,
+      container: container,
     });
 
     this.gui.domElement.style.right = "0px";
@@ -255,6 +215,9 @@ export class DebugUI {
         seedController.updateDisplay();
         this.generator.setSeed(newSeed);
       },
+      reset: () => {
+        this.generator.reset();
+      },
     };
 
     const seedController = this.gui
@@ -266,6 +229,7 @@ export class DebugUI {
 
     this.gui.add(params, "randomSeed").name("Random Seed");
     this.gui.add(params, "generate").name("Generate");
+    this.gui.add(params, "reset").name("Reset");
   }
 
   /**
@@ -367,63 +331,51 @@ export class DebugUI {
 
     return container;
   }
-}
 
-/**
- * Shows the progress bar with a message
- */
-export function showProgress(
-  elements: DemoUIElements | null,
-  message: string = "Generating..."
-): void {
-  if (elements?.progressElement) {
-    elements.progressElement.style.display = "block";
-    const label = elements.progressElement.querySelector(".progress-label");
-    if (label) {
-      label.textContent = message;
+  showProgress(message: string = "Generating..."): void {
+    if (this.progressElement) {
+      this.progressElement.style.display = "block";
+      const label = this.progressElement.querySelector(".progress-label");
+      if (label) {
+        label.textContent = message;
+      }
     }
   }
-}
 
-/**
- * Hides the progress bar
- */
-export function hideProgress(elements: DemoUIElements | null): void {
-  if (elements?.progressElement) {
-    elements.progressElement.style.display = "none";
-  }
-}
-
-/**
- * Updates the progress bar percentage
- */
-export function setProgress(
-  elements: DemoUIElements | null,
-  percent: number
-): void {
-  if (elements?.progressElement) {
-    const fill = elements.progressElement.querySelector(
-      ".progress-fill"
-    ) as HTMLElement;
-    if (fill) {
-      fill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+  /**
+   * Updates the progress bar percentage
+   */
+  setProgress(percent: number): void {
+    if (this.progressElement) {
+      const fill = this.progressElement.querySelector(
+        ".progress-fill"
+      ) as HTMLElement;
+      if (fill) {
+        fill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+      }
     }
   }
-}
 
-/**
- * Sets the progress bar color
- */
-export function setProgressColor(
-  elements: DemoUIElements | null,
-  color: string
-): void {
-  if (elements?.progressElement) {
-    const fill = elements.progressElement.querySelector(
-      ".progress-fill"
-    ) as HTMLElement;
-    if (fill) {
-      fill.style.backgroundColor = color;
+  /**
+   * Sets the progress bar color
+   */
+  setProgressColor(color: string): void {
+    if (this.progressElement) {
+      const fill = this.progressElement.querySelector(
+        ".progress-fill"
+      ) as HTMLElement;
+      if (fill) {
+        fill.style.backgroundColor = color;
+      }
+    }
+  }
+
+  /**
+   * Hides the progress bar
+   */
+  hideProgress(): void {
+    if (this.progressElement) {
+      this.progressElement.style.display = "none";
     }
   }
 }

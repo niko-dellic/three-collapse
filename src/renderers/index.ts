@@ -1,5 +1,2 @@
-export {
-  InstancedModelRenderer,
-  type TileInstance,
-  type TileTransformOverride,
-} from "./InstancedModelRenderer";
+export { InstancedModelRenderer } from "./InstancedModelRenderer";
+export { type TileInstance, type TileTransformOverride } from "../types";

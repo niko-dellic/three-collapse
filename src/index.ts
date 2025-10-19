@@ -36,10 +36,6 @@ export { InstancedModelRenderer, type TileInstance } from "./renderers";
 
 // Utilities
 export {
-  createScene,
-  addLighting,
-  createResizeHandler,
-  createAnimationLoop,
   validateTileAdjacency,
   prepareTilesForWorker,
   createAirTile,
@@ -56,13 +52,6 @@ export {
   DebugGrid,
   AdjacencyBuilderUI,
   DebugUI,
-  showProgress,
-  hideProgress,
-  setProgress,
-  setProgressColor,
-  type SceneConfig,
-  type LightConfig,
-  type SceneSetupResult,
   type WorkerTask,
   type WorkerResponse,
   type Region3D,
@@ -73,9 +62,5 @@ export {
   type TilePair,
   type AdjacencyData,
   type TileData,
-  type DebugUIConfig,
-  type DemoUIConfig,
-  type DemoUIElements,
-  type DemoInstance,
   type TileTransform,
 } from "./utils";

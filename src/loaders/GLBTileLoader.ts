@@ -116,9 +116,8 @@ export class GLBTileLoader {
       });
     }
 
-    if (extractedGeometry === null || extractedMaterial === null) {
+    if (extractedGeometry === null || extractedMaterial === null)
       throw new Error("No mesh found in geometry function result");
-    }
 
     // Calculate bounding box
     extractedGeometry.computeBoundingBox();
@@ -165,6 +164,12 @@ export class GLBTileLoader {
           );
           throw error;
         }
+      } else if (config.model instanceof THREE.Object3D) {
+        const modelData = this.createModelDataFromGeometry(
+          () => config.model as THREE.Object3D
+        );
+        const finalModelData = this.applyOverrides(modelData, config);
+        modelMap.set(config.id, finalModelData);
       }
     }
 

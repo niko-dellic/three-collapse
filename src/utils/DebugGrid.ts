@@ -11,10 +11,15 @@ export class DebugGrid {
   private currentWidth: number = 0;
   private currentHeight: number = 0;
   private currentDepth: number = 0;
-
-  constructor(scene: THREE.Scene, cellSize: number = 1) {
+  private color: number;
+  constructor(
+    scene: THREE.Scene,
+    cellSize: number = 1,
+    color: number = 0x00ff00
+  ) {
     this.scene = scene;
     this.cellSize = cellSize;
+    this.color = color;
     this.gridGroup = new THREE.Group();
     this.gridGroup.name = "debug_grid";
     this.gridGroup.visible = false;
@@ -48,9 +53,8 @@ export class DebugGrid {
     depth: number
   ): void {
     const material = new THREE.LineBasicMaterial({
-      color: 0x00ff00,
+      color: this.color,
       transparent: true,
-      opacity: 0.3,
       linewidth: 1,
     });
 

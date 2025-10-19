@@ -1,26 +1,6 @@
 import * as THREE from "three";
 import type { LoadedModelData } from "../loaders/GLBTileLoader";
-
-/**
- * Instance data for a single tile placement
- */
-export interface TileInstance {
-  tileId: string;
-  x: number;
-  y: number;
-  z: number;
-  rotation?: number; // Rotation in radians (for future use)
-}
-
-/**
- * Transform overrides for a tile type
- */
-export interface TileTransformOverride {
-  position?: THREE.Vector3;
-  rotation?: THREE.Euler;
-  scale?: THREE.Vector3;
-}
-
+import type { TileInstance, TileTransformOverride } from "../types";
 /**
  * Renders collapsed WFC grid using instanced meshes for memory efficiency
  */
@@ -28,21 +8,20 @@ export class InstancedModelRenderer {
   private scene: THREE.Scene;
   private instancedMeshes: Map<string, THREE.InstancedMesh>;
   private instanceData: Map<string, TileInstance[]>; // Store instances per tile
-  private modelData: Map<string, LoadedModelData>;
+  private modelData: Map<string, LoadedModelData> | null = null;
   private cellSize: number;
   private transformOverrides: Map<string, TileTransformOverride>; // Per-tile transform overrides
 
-  constructor(
-    scene: THREE.Scene,
-    modelData: Map<string, LoadedModelData>,
-    cellSize: number = 1
-  ) {
+  constructor(scene: THREE.Scene, cellSize: number = 1) {
     this.scene = scene;
-    this.modelData = modelData;
     this.cellSize = cellSize;
     this.instancedMeshes = new Map();
     this.instanceData = new Map();
     this.transformOverrides = new Map();
+  }
+
+  updateTileset(modelData: Map<string, LoadedModelData>): void {
+    this.modelData = modelData;
   }
 
   /**
@@ -77,6 +56,8 @@ export class InstancedModelRenderer {
 
     // Store instance data
     this.instanceData = instanceCounts;
+
+    if (!this.modelData) throw new Error("No model data found");
 
     // Create instanced meshes for each tile type
     for (const [tileId, instances] of instanceCounts.entries()) {
@@ -203,6 +184,8 @@ export class InstancedModelRenderer {
 
     // Get or create instanced mesh
     let instancedMesh = this.instancedMeshes.get(tileId);
+
+    if (!this.modelData) throw new Error("No model data found");
 
     if (!instancedMesh) {
       // Create new instanced mesh with initial capacity
@@ -360,6 +343,7 @@ export class InstancedModelRenderer {
     tileId: string,
     instances: TileInstance[]
   ): void {
+    if (!this.modelData) throw new Error("No model data found");
     const modelData = this.modelData.get(tileId);
     if (!modelData) return;
 
