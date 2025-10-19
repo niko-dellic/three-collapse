@@ -110,6 +110,7 @@ export class InstancedModelRenderer {
       }
     }
     this.instancedMeshes.clear();
+    this.instanceData.clear();
   }
 
   /**

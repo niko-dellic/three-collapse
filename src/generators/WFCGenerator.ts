@@ -81,6 +81,7 @@ export class WFCGenerator {
    * @returns Promise resolving to the generated 3D grid
    */
   async generate(options: GenerateOptions = {}): Promise<string[][][]> {
+    this.reset();
     const { width, height, depth } = this.getDimensions();
 
     this.debugUI?.showProgress("Loading GLB models...");
