@@ -1266,10 +1266,6 @@ export class WFCGenerator {
     const maxWorkers = navigator.hardwareConcurrency || 4;
     const validCount = Math.min(Math.max(1, count), maxWorkers);
 
-    console.log(
-      `Recreating worker pool with ${validCount} workers (max: ${maxWorkers})`
-    );
-
     // Terminate existing pool
     this.workerPool.terminate();
 

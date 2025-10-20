@@ -19,7 +19,7 @@ import { WFCGenerator } from "../../src/generators/WFCGenerator";
  */
 
 async function loadTilesFromGLBFolder(): Promise<ModelTile3DConfig[]> {
-  const glbModules = import.meta.glob("/public/models/blocksez/*.glb", {
+  const glbModules = import.meta.glob("/public/models/offset/*.glb", {
     eager: false,
     query: "?url",
     import: "default",

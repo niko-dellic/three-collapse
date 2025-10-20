@@ -173,7 +173,6 @@ export class DebugUI {
       .name(`Workers (max: ${maxWorkers})`)
       .onChange((value: number) => {
         this.generator.setWorkerCount(value);
-        console.log(`✓ Worker count changed to ${value}`);
       });
 
     const generateParams = {

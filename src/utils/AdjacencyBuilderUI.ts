@@ -134,7 +134,6 @@ export class AdjacencyBuilderUI {
   private noBtn!: HTMLButtonElement;
   private yesAllBtn!: HTMLButtonElement;
   private noAllBtn!: HTMLButtonElement;
-  private autoCenterToggle!: HTMLInputElement;
   private showLabelsToggle!: HTMLInputElement;
   private showVoxelDebugToggle!: HTMLInputElement;
   private tileSizeSlider!: HTMLInputElement;
@@ -262,10 +261,6 @@ export class AdjacencyBuilderUI {
 
         <div style="margin: 15px 0; font-size: 12px">
           <label style="display: flex; align-items: center; gap: 8px; cursor: pointer">
-            <input type="checkbox" id="auto-center-toggle" checked />
-            Auto-center objects at origin
-          </label>
-          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 8px">
             <input type="checkbox" id="show-labels-toggle" />
             Show tile labels
           </label>
@@ -344,9 +339,6 @@ export class AdjacencyBuilderUI {
       "yes-all-btn"
     ) as HTMLButtonElement;
     this.noAllBtn = document.getElementById("no-all-btn") as HTMLButtonElement;
-    this.autoCenterToggle = document.getElementById(
-      "auto-center-toggle"
-    ) as HTMLInputElement;
     this.showLabelsToggle = document.getElementById(
       "show-labels-toggle"
     ) as HTMLInputElement;
@@ -424,13 +416,6 @@ export class AdjacencyBuilderUI {
     );
 
     // Toggles
-    this.autoCenterToggle.addEventListener("change", () => {
-      const pair = this.getCurrentPair();
-      if (pair) {
-        this.displayTilePair(pair, this.DIRECTIONS[this.currentDirection]);
-      }
-    });
-
     this.showLabelsToggle.addEventListener("change", () => {
       this.showLabels = this.showLabelsToggle.checked;
       if (this.labelA) this.labelA.visible = this.showLabels;
@@ -763,22 +748,16 @@ export class AdjacencyBuilderUI {
     this.tileAObject = tileA.object.clone() as THREE.Group;
     this.tileBObject = tileB.object.clone() as THREE.Group;
 
-    if (this.autoCenterToggle.checked) {
-      this.centerObjectAtOrigin(this.tileAObject);
-      this.centerObjectAtOrigin(this.tileBObject);
-    } else {
-      this.tileAObject.position.set(0, 0, 0);
-    }
+    // Position tile A at the voxel center (origin)
+    // Objects maintain their natural position within the voxel cell as defined in the GLB
+    this.tileAObject.position.set(0, 0, 0);
 
     // Apply tile size to the offset (voxel boundary extent), not the geometry scale
     const offset = this.DIRECTION_OFFSETS[direction]
       .clone()
       .multiplyScalar(this.tileSize);
-    if (this.autoCenterToggle.checked) {
-      this.tileBObject.position.add(offset);
-    } else {
-      this.tileBObject.position.copy(offset);
-    }
+    // Position tile B at the offset voxel center
+    this.tileBObject.position.copy(offset);
 
     // Color tiles
     this.tileAObject.traverse((child) => {
@@ -864,11 +843,13 @@ export class AdjacencyBuilderUI {
     lineB.position.copy(offsetB);
 
     // Add to debug grid's internal group
-    // Access the gridGroup through the scene
-    const gridGroup = this.scene.getObjectByName("DebugGrid");
+    // Access the gridGroup through the scene (correct name is "debug_grid")
+    const gridGroup = this.scene.getObjectByName("debug_grid");
     if (gridGroup) {
       gridGroup.add(lineA);
       gridGroup.add(lineB);
+    } else {
+      console.warn("Debug grid group not found in scene");
     }
 
     // Clean up temporary geometries
@@ -876,13 +857,6 @@ export class AdjacencyBuilderUI {
     edgesA.dispose();
     geometryB.dispose();
     edgesB.dispose();
-  }
-
-  private centerObjectAtOrigin(object: THREE.Object3D): void {
-    const box = new THREE.Box3().setFromObject(object);
-    const center = new THREE.Vector3();
-    box.getCenter(center);
-    object.position.sub(center);
   }
 
   private createSpriteTextLabel(text: string, color: string): SpriteText {
