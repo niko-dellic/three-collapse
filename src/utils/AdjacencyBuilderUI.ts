@@ -118,7 +118,7 @@ export class AdjacencyBuilderUI {
   };
 
   // UI Elements (will be created programmatically)
-  private pickDirectoryBtn!: HTMLButtonElement;
+  private loadFilesBtn!: HTMLButtonElement;
   private fileUpload!: HTMLInputElement;
   private startBtn!: HTMLButtonElement;
 
@@ -224,19 +224,15 @@ export class AdjacencyBuilderUI {
       
       <div class="section">
         <h3>Load GLB Files</h3>
-        <button id="pick-directory-btn" style="margin-bottom: 10px">📁 Pick Directory (recommended)</button>
+        <button id="load-files-btn" style="margin-bottom: 10px">📁 Load GLB Files</button>
         <div style="font-size: 10px; color: #94a3b8; margin-bottom: 15px">
-          Saves back to same folder when exporting
+          Uses folder picker when available (Chrome, Edge)<br>
+          Falls back to file upload (Safari, Firefox)
         </div>
         
-        
-        <div class="file-upload-wrapper">
-          <input type="file" id="file-upload" multiple accept=".glb" />
-          <label for="file-upload" class="file-upload-label">
-            📄 Upload GLB Files
-          </label>
-          <div class="file-upload-info" id="file-upload-info">Falls back to download</div>
-        </div>
+        <!-- Hidden file input for fallback -->
+        <input type="file" id="file-upload" multiple accept=".glb" style="display: none" />
+        <div class="file-upload-info" id="file-upload-info" style="font-size: 11px; color: #94a3b8; margin-bottom: 15px"></div>
         
         <button id="start-btn" style="margin-top: 10px">Start</button>
       </div>
@@ -315,8 +311,8 @@ export class AdjacencyBuilderUI {
     document.body.appendChild(this.loadingOverlay);
 
     // Get references to UI elements
-    this.pickDirectoryBtn = document.getElementById(
-      "pick-directory-btn"
+    this.loadFilesBtn = document.getElementById(
+      "load-files-btn"
     ) as HTMLButtonElement;
     this.fileUpload = document.getElementById(
       "file-upload"
@@ -378,23 +374,26 @@ export class AdjacencyBuilderUI {
   }
 
   private setupEventListeners(): void {
-    // Directory picker button
-    this.pickDirectoryBtn.addEventListener("click", () =>
-      this.handlePickDirectory()
-    );
+    // Load files button - try directory picker first, fallback to file upload
+    this.loadFilesBtn.addEventListener("click", () => this.handleLoadFiles());
 
-    // File upload change - update info text
-    this.fileUpload.addEventListener("change", () => {
+    // File upload change - update info text and auto-start
+    this.fileUpload.addEventListener("change", async () => {
       const fileInfo = document.getElementById("file-upload-info");
       if (fileInfo) {
         const count = this.fileUpload.files?.length || 0;
         if (count === 0) {
-          fileInfo.textContent = "Falls back to download";
+          fileInfo.textContent = "";
         } else if (count === 1) {
-          fileInfo.textContent = `1 file: ${this.fileUpload.files![0].name}`;
+          fileInfo.textContent = `Selected: ${this.fileUpload.files![0].name}`;
         } else {
-          fileInfo.textContent = `${count} files selected`;
+          fileInfo.textContent = `Selected: ${count} files`;
         }
+      }
+
+      // Auto-start after file selection
+      if (this.fileUpload.files && this.fileUpload.files.length > 0) {
+        await this.handleStart();
       }
     });
 
@@ -457,30 +456,37 @@ export class AdjacencyBuilderUI {
     this.exportGlbBtn.addEventListener("click", () => this.handleExportGLB());
   }
 
-  private async handlePickDirectory(): Promise<void> {
-    // Check if File System Access API is supported
-    if (!("showDirectoryPicker" in window)) {
-      alert(
-        "Directory picking not supported in this browser. Please use file upload instead."
-      );
-      return;
-    }
+  private async handleLoadFiles(): Promise<void> {
+    // Try directory picker first if supported
+    if ("showDirectoryPicker" in window) {
+      try {
+        // @ts-ignore - File System Access API
+        this.directoryHandle = await window.showDirectoryPicker({
+          mode: "readwrite", // Request write permission for later export
+        });
 
-    try {
-      // @ts-ignore - File System Access API
-      this.directoryHandle = await window.showDirectoryPicker({
-        mode: "readwrite", // Request write permission for later export
-      });
+        console.log(`Selected directory: ${this.directoryHandle.name}`);
 
-      console.log(`Selected directory: ${this.directoryHandle.name}`);
+        // Update info text
+        const fileInfo = document.getElementById("file-upload-info");
+        if (fileInfo) {
+          fileInfo.textContent = `Selected folder: ${this.directoryHandle.name}`;
+        }
 
-      // Auto-start after directory selection
-      await this.handleStart();
-    } catch (error) {
-      if ((error as Error).name !== "AbortError") {
-        console.error("Error picking directory:", error);
-        alert("Error accessing directory. Check console for details.");
+        // Auto-start after directory selection
+        await this.handleStart();
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          console.error("Error picking directory:", error);
+          alert("Error accessing directory. Check console for details.");
+        }
       }
+    } else {
+      // Fallback to file upload for browsers that don't support directory picker
+      console.log(
+        "Directory picker not supported, falling back to file upload"
+      );
+      this.fileUpload.click();
     }
   }
 
@@ -496,14 +502,14 @@ export class AdjacencyBuilderUI {
         // Load from uploaded files
         await this.loadFromUploadedFiles();
       } else {
-        alert("Please pick a directory or upload GLB files first");
+        alert("Please load GLB files first");
         this.loadingOverlay.classList.remove("active");
         return;
       }
 
       this.builderSection.style.display = "block";
       this.startBtn.disabled = true;
-      this.pickDirectoryBtn.disabled = true;
+      this.loadFilesBtn.disabled = true;
       this.currentDirection = 0;
 
       this.generatePairNavigation();

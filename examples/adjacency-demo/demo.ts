@@ -7,7 +7,6 @@
  * 3. Use in WFC generation
  */
 
-import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { ModelTile3DConfig } from "../../src/wfc3d";
 import { createScene, updateDirectionalLight } from "../SceneSetup";

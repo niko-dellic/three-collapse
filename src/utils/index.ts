@@ -49,3 +49,23 @@ export {
   type AdjacencyData,
   type TileData,
 } from "./AdjacencyBuilderUI";
+
+export {
+  ConnectorBuilderUI,
+  type ConnectorBuilderConfig,
+  type ConnectorData,
+  type TileConnectors,
+  type DirectionalExclusion,
+  type ConnectorTile,
+} from "./ConnectorBuilderUI";
+
+export {
+  pickDirectory,
+  loadGLBFilesFromDirectory,
+  parseGLBFiles,
+  exportSceneToGLB,
+  saveGLBToFileHandle,
+  downloadGLB,
+  downloadJSON,
+  type LoadedGLBFile,
+} from "./GLBFileUtils";

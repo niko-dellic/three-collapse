@@ -88,8 +88,9 @@ Open your browser to the URL shown in the terminal (typically http://localhost:5
 
 - `/` - Voxel-based demo (colored cubes)
 - `/models.html` - Model-based demo (GLB files)
-- `/adjacency-builder.html` - Visual adjacency builder tool
-- `/adjacency-demo.html` - Complete GLB userData workflow demo
+- `/adjacency-builder.html` - Manual adjacency builder tool
+- `/connector-builder.html` - Connector-based adjacency builder (recommended)
+- `/vr-demo.html` - VR demonstration
 
 ### Build
 
@@ -201,9 +202,46 @@ if (success) {
 }
 ```
 
-### Adjacency Builder Tool
+### Adjacency Builder Tools
 
-Building correct adjacency rules is crucial for WFC. The Adjacency Builder provides a visual interface to define these rules.
+Building correct adjacency rules is crucial for WFC. We provide two tools:
+
+#### 1. Connector Builder (Recommended)
+
+Automated adjacency generation using connector-based system inspired by [Marian42's WFC implementation](https://marian42.de/article/wfc/).
+
+**Key Features**:
+
+- O(N) connector assignments instead of O(N²) pair reviews
+- Grid layout with drag selection
+- Automatic adjacency generation from connectors
+- Directional exclusion rules
+- Transform controls for tile positioning
+
+**Usage**:
+
+```typescript
+import { ConnectorBuilderUI } from "three-collapse";
+
+new ConnectorBuilderUI({
+  gridSpacing: 3,
+});
+```
+
+**Web Interface**:
+
+1. Navigate to `/connector-builder.html`
+2. Load GLB files (directory or upload)
+3. Select tiles and edit their face connectors
+4. Click "Auto-Generate Adjacencies"
+5. Export GLB files with embedded data
+
+📚 **See [Connector Builder Guide](./examples/connector-builder/README.md) for details.**  
+📚 **See [Technical Documentation](./docs/CONNECTOR_BUILDER.md) for implementation.**
+
+#### 2. Manual Adjacency Builder
+
+Traditional pair-by-pair review interface for precise control.
 
 **Programmatic Usage**:
 
