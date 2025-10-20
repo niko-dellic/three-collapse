@@ -19,7 +19,7 @@ import { WFCGenerator } from "../../src/generators/WFCGenerator";
  */
 
 async function loadTilesFromGLBFolder(): Promise<ModelTile3DConfig[]> {
-  const glbModules = import.meta.glob("/public/models/offset/*.glb", {
+  const glbModules = import.meta.glob("/public/models/architecture-ez/*.glb", {
     eager: false,
     query: "?url",
     import: "default",
@@ -48,7 +48,6 @@ async function loadTilesFromGLBFolder(): Promise<ModelTile3DConfig[]> {
       // Convert GLTF scene to tiles using utility function
       const tileMeshes = gltfObjectToTiles(gltf.scene, {
         idPrefix: filenameWithoutExt,
-        baseRotation: new THREE.Euler(Math.PI / 2, 0, 0),
         recursive: true,
         doubleSided: true,
       });
