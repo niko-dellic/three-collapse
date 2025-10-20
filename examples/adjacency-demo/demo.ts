@@ -144,6 +144,17 @@ async function loadTilesFromGLBFolder(): Promise<ModelTile3DConfig[]> {
         );
       }
     });
+    generator.onCellSizeChanged("update-grid-lights-cellsize", (cellSize) => {
+      if (gridLights) {
+        const dimensions = generator.getDimensions();
+        gridLights.updateGrid(
+          dimensions.width,
+          dimensions.height,
+          dimensions.depth,
+          cellSize
+        );
+      }
+    });
     // generator.collapse({
     //   offset: {
     //     x: (-config.width * config.cellSize) / 2,

@@ -240,7 +240,7 @@ export class InstancedModelRenderer {
       } else {
         // Different tile type at same position - warn and skip
         console.warn(
-          `Attempted to render tile "${tileId}" at position (${x}, ${y}, ${z}) but "${existingTileId}" is already there. Skipping duplicate.`
+          `⚠️  Duplicate render at (${x}, ${y}, ${z}): tried "${tileId}" but "${existingTileId}" already there`
         );
         return;
       }

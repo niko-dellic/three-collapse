@@ -106,14 +106,17 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       if (message.assignedCells && message.assignedCells.length > 0) {
         const totalCells = message.assignedCells.length;
         let collapsedCount = 0;
+        let skippedPreCollapsed = 0;
 
         // Collapse only assigned cells
         for (const [x, y, z] of message.assignedCells) {
           const cell = wfc.buffer.getCell(x, y, z);
 
+          // Skip if already collapsed (e.g., pre-collapsed boundary)
           if (!cell || cell.collapsed) {
             collapsedCount++;
-            continue;
+            skippedPreCollapsed++;
+            continue; // Don't send tile update for pre-collapsed cells
           }
 
           // Collapse this specific cell
@@ -122,7 +125,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           if (tileId) {
             collapsedCount++;
 
-            // Send tile update
+            // Send tile update (only for newly collapsed cells)
             const tileMsg: TileUpdateMessage = {
               type: "tile_update",
               x,
@@ -142,6 +145,12 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             // Contradiction - this shouldn't happen with proper boundaries
             throw new Error(`Contradiction at (${x}, ${y}, ${z})`);
           }
+        }
+
+        if (skippedPreCollapsed > 0) {
+          console.warn(
+            `Worker skipped ${skippedPreCollapsed} pre-collapsed cells that shouldn't have been assigned`
+          );
         }
 
         success = true;

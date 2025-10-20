@@ -73,12 +73,25 @@ export async function generateWithWorkers(
 
   // Split grid into regions
   const regions = splitGridIntoRegions(width, height, depth, workerCount);
+  console.log(
+    `Grid ${width}x${height}x${depth} split into ${regions.length} regions:`
+  );
+  regions.forEach((region, index) => {
+    const cellsInRegion =
+      (region.xMax - region.xMin) *
+      (region.yMax - region.yMin) *
+      (region.zMax - region.zMin);
+    console.log(
+      `  Region ${index}: [${region.xMin}-${region.xMax}) x [${region.yMin}-${region.yMax}) x [${region.zMin}-${region.zMax}) = ${cellsInRegion} cells`
+    );
+  });
 
   // Get ALL boundary cells
   const boundaryCells = getBoundaryCells(width, height, depth, regions);
   const boundarySet = new Set(
     boundaryCells.map(([x, y, z]) => `${x},${y},${z}`)
   );
+  console.log(`Identified ${boundaryCells.length} boundary cells`);
 
   // Pre-collapse all boundaries on main thread
   const preCollapsedCells = await generateBoundaries(
@@ -92,15 +105,51 @@ export async function generateWithWorkers(
   );
 
   // Get interior cells for each region
-  const regionCellAssignments = regions.map((region) =>
-    getCellsForRegion(region, boundarySet)
-  );
+  const regionCellAssignments = regions.map((region, index) => {
+    const cells = getCellsForRegion(region, boundarySet);
+    const totalCellsInRegion =
+      (region.xMax - region.xMin) *
+      (region.yMax - region.yMin) *
+      (region.zMax - region.zMin);
+    const boundaryCellsInRegion = totalCellsInRegion - cells.length;
+
+    if (cells.length === 0) {
+      console.warn(
+        `  ⚠️  Region ${index} has NO interior cells (${totalCellsInRegion} total, ${boundaryCellsInRegion} boundaries)`
+      );
+    }
+
+    // Validate: ensure no assigned cell is in boundarySet
+    const overlaps = cells.filter(([x, y, z]) =>
+      boundarySet.has(`${x},${y},${z}`)
+    );
+    if (overlaps.length > 0) {
+      console.error(
+        `❌ Region ${index} has ${overlaps.length} cells that are boundaries! First: (${overlaps[0][0]}, ${overlaps[0][1]}, ${overlaps[0][2]})`
+      );
+    }
+
+    return cells;
+  });
 
   // Log cell distribution
   console.log(`Distributing cells across ${workerCount} workers:`);
   regionCellAssignments.forEach((cells, index) => {
     console.log(`  Worker ${index} assigned ${cells.length} cells`);
   });
+
+  const totalAssignedCells = regionCellAssignments.reduce(
+    (sum, cells) => sum + cells.length,
+    0
+  );
+  const totalCells = width * height * depth;
+  console.log(
+    `Total: ${totalAssignedCells} interior + ${
+      boundaryCells.length
+    } boundary = ${
+      totalAssignedCells + boundaryCells.length
+    } of ${totalCells} cells`
+  );
 
   // Create tasks with specific cell assignments
   const regionPromises = regionCellAssignments.map((assignedCells, index) =>

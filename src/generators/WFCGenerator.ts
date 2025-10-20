@@ -54,6 +54,7 @@ export class WFCGenerator {
 
   // Completion callbacks
   private onCollapseComplete: Record<string, () => void> = {};
+  private onCellSizeChange: Record<string, (cellSize: number) => void> = {};
 
   /**
    * Create a new WFC Generator
@@ -1116,6 +1117,9 @@ export class WFCGenerator {
         this.renderer.render(this.grid, this.enabledCells);
       }
     }
+
+    // Trigger cell size change callbacks
+    this.triggerCellSizeChangeCallbacks(cellSize);
   }
 
   /**
@@ -1253,6 +1257,41 @@ export class WFCGenerator {
   }
 
   /**
+   * Register a callback to be invoked when the cell size changes
+   * @param id - Unique identifier for this callback (used for unregistering)
+   * @param callback - Function to call when cell size changes (receives new cell size)
+   * @returns The WFCGenerator instance for chaining
+   */
+  onCellSizeChanged(id: string, callback: (cellSize: number) => void): this {
+    this.onCellSizeChange[id] = callback;
+    return this;
+  }
+
+  /**
+   * Unregister a cell size change callback
+   * @param id - The identifier of the callback to remove
+   * @returns The WFCGenerator instance for chaining
+   */
+  offCellSizeChanged(id: string): this {
+    delete this.onCellSizeChange[id];
+    return this;
+  }
+
+  /**
+   * Clear all registered cell size change callbacks
+   */
+  clearCellSizeChangeCallbacks(): void {
+    this.onCellSizeChange = {};
+  }
+
+  /**
+   * Get all registered cell size change callback IDs
+   */
+  getRegisteredCellSizeChangeCallbacks(): string[] {
+    return Object.keys(this.onCellSizeChange);
+  }
+
+  /**
    * Get the number of workers in the pool
    */
   getWorkerCount(): number {
@@ -1283,6 +1322,7 @@ export class WFCGenerator {
       this.renderer.clear();
     }
     this.clearCompleteCallbacks();
+    this.clearCellSizeChangeCallbacks();
     this.reset();
   }
 
@@ -1295,6 +1335,19 @@ export class WFCGenerator {
         callback();
       } catch (error) {
         console.error("Error in completion callback:", error);
+      }
+    });
+  }
+
+  /**
+   * Trigger all registered cell size change callbacks
+   */
+  private triggerCellSizeChangeCallbacks(cellSize: number): void {
+    Object.values(this.onCellSizeChange).forEach((callback) => {
+      try {
+        callback(cellSize);
+      } catch (error) {
+        console.error("Error in cell size change callback:", error);
       }
     });
   }

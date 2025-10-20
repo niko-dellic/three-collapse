@@ -68,10 +68,27 @@ export function splitGridIntoRegions(
         const zMin = Math.floor((iz * depth) / splitZ);
         const zMax = Math.floor(((iz + 1) * depth) / splitZ);
 
-        regions.push({ xMin, xMax, yMin, yMax, zMin, zMax });
+        // Only add regions with volume > 0 (skip degenerate regions from small/flat grids)
+        if (xMax > xMin && yMax > yMin && zMax > zMin) {
+          regions.push({ xMin, xMax, yMin, yMax, zMin, zMax });
+        }
       }
     }
   }
+
+  // If all regions filtered out (grid too small), return single region
+  if (regions.length === 0) {
+    console.warn(
+      `Grid ${width}×${height}×${depth} too small for ${workerCount} workers, using 1 worker`
+    );
+    return [
+      { xMin: 0, xMax: width, yMin: 0, yMax: height, zMin: 0, zMax: depth },
+    ];
+  }
+
+  console.log(
+    `Splitting ${width}×${height}×${depth} grid: ${splitX}×${splitY}×${splitZ} → ${regions.length} valid regions (requested ${workerCount})`
+  );
 
   return regions;
 }
@@ -129,8 +146,18 @@ export function getBoundaryCells(
 
   // For each region, find cells on its boundaries with other regions
   for (const region of regions) {
-    // Check each face of the region
-    // +X face
+    // Check all 6 faces of the region
+
+    // -X face (left face, first cell in X)
+    if (region.xMin > 0) {
+      for (let y = region.yMin; y < region.yMax; y++) {
+        for (let z = region.zMin; z < region.zMax; z++) {
+          boundaries.add(`${region.xMin},${y},${z}`);
+        }
+      }
+    }
+
+    // +X face (right face, last cell in X)
     if (region.xMax < width) {
       for (let y = region.yMin; y < region.yMax; y++) {
         for (let z = region.zMin; z < region.zMax; z++) {
@@ -139,7 +166,16 @@ export function getBoundaryCells(
       }
     }
 
-    // +Y face
+    // -Y face (bottom face, first cell in Y)
+    if (region.yMin > 0) {
+      for (let x = region.xMin; x < region.xMax; x++) {
+        for (let z = region.zMin; z < region.zMax; z++) {
+          boundaries.add(`${x},${region.yMin},${z}`);
+        }
+      }
+    }
+
+    // +Y face (top face, last cell in Y)
     if (region.yMax < height) {
       for (let x = region.xMin; x < region.xMax; x++) {
         for (let z = region.zMin; z < region.zMax; z++) {
@@ -148,7 +184,16 @@ export function getBoundaryCells(
       }
     }
 
-    // +Z face
+    // -Z face (front face, first cell in Z)
+    if (region.zMin > 0) {
+      for (let x = region.xMin; x < region.xMax; x++) {
+        for (let y = region.yMin; y < region.yMax; y++) {
+          boundaries.add(`${x},${y},${region.zMin}`);
+        }
+      }
+    }
+
+    // +Z face (back face, last cell in Z)
     if (region.zMax < depth) {
       for (let x = region.xMin; x < region.xMax; x++) {
         for (let y = region.yMin; y < region.yMax; y++) {
