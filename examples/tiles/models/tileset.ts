@@ -4,13 +4,19 @@ import {
   createAirTile,
   createBoxTile,
   createCylinderTile,
-  validateTileAdjacency,
+  convertAdjacencyToConnectors,
 } from "../../../src/utils";
 import { createPlaneTile } from "../../../src/utils/TileHelpers";
 
 /**
- * Simplified tileset for easier testing with fewer constraints
- * Note: This tileset is validated to ensure all adjacency references exist
+ * Example tilesets demonstrating both legacy adjacency and new connector systems
+ *
+ * The raw tilesets use the old adjacency format and are converted to connector-based
+ * configs using the convertAdjacencyToConnectors helper. This provides backward
+ * compatibility while allowing use with the new WFC system.
+ *
+ * For production use, it's recommended to use ConnectorBuilderUI to create
+ * proper connector-based tilesets with fine-grained control over symmetry and rotation.
  */
 const simpleModelTilesetRaw: ModelTile3DConfig[] = [
   {
@@ -54,8 +60,11 @@ const simpleModelTilesetRaw: ModelTile3DConfig[] = [
   },
 ];
 
-// Validate and export the tileset (removes invalid adjacency references)
-export const simpleModelTileset = validateTileAdjacency(simpleModelTilesetRaw);
+// Export both raw (legacy) and converted (connector-based) versions
+export const simpleModelTilesetRaw_Legacy = simpleModelTilesetRaw;
+export const simpleModelTileset = convertAdjacencyToConnectors(
+  simpleModelTilesetRaw
+);
 
 /**
  * Mixed tileset demonstrating both GLB models and procedural geometry
@@ -169,8 +178,10 @@ const mixedModelTilesetRaw: ModelTile3DConfig[] = [
   },
 ];
 
-// Validate and export the tileset (removes invalid adjacency references)
-export const mixedModelTileset = validateTileAdjacency(mixedModelTilesetRaw);
+// Export both raw (legacy) and converted (connector-based) versions
+export const mixedModelTilesetRaw_Legacy = mixedModelTilesetRaw;
+export const mixedModelTileset =
+  convertAdjacencyToConnectors(mixedModelTilesetRaw);
 
 // @ts-ignore
 const invertY = { x: -1, y: 1, z: 1 };
@@ -262,5 +273,6 @@ const blockTilesetRaw: ModelTile3DConfig[] = [
   // },
 ];
 
-// Validate and export the tileset (removes invalid adjacency references)
-export const blockTileset = validateTileAdjacency(blockTilesetRaw);
+// Export both raw (legacy) and converted (connector-based) versions
+export const blockTilesetRaw_Legacy = blockTilesetRaw;
+export const blockTileset = convertAdjacencyToConnectors(blockTilesetRaw);

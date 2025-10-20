@@ -6,56 +6,42 @@ import type { ModelTile3DConfig } from "../wfc3d";
  */
 
 /**
- * Validates and cleans tile adjacency rules by removing references to non-existent tiles
+ * Validates and cleans tile exclusion rules by removing references to non-existent tiles
  * This helps catch configuration errors where tiles reference IDs that don't exist
  *
  * @param tiles - Array of tile configurations to validate
- * @returns Array of tile configs with cleaned adjacency rules (only valid tile IDs)
+ * @returns Array of tile configs with cleaned exclusion rules (only valid tile IDs)
  */
-export function validateTileAdjacency<T extends ModelTile3DConfig>(
+export function validateTileExclusions<T extends ModelTile3DConfig>(
   tiles: T[]
 ): T[] {
   // Get set of all valid tile IDs
   const validIds = new Set(tiles.map((tile) => tile.id));
 
-  // Filter adjacency rules to only include valid IDs
+  // Filter exclusion rules to only include valid IDs
   return tiles.map((tile) => {
-    if (!tile.adjacency) return tile;
+    if (!tile.exclusions || tile.exclusions.length === 0) return tile;
 
-    const cleanedAdjacency: typeof tile.adjacency = {};
-
-    // Process each direction
-    for (const [direction, ids] of Object.entries(tile.adjacency)) {
-      if (Array.isArray(ids)) {
-        // Filter out invalid IDs
-        const validIdsForDirection = ids.filter((id) => {
-          const isValid = validIds.has(id);
-          if (!isValid) {
-            console.warn(
-              `Tile "${tile.id}" references non-existent tile "${id}" in ${direction} adjacency. Removing reference.`
-            );
-          }
-          return isValid;
-        });
-
-        // Only include direction if it has valid IDs
-        if (validIdsForDirection.length > 0) {
-          cleanedAdjacency[direction as keyof typeof tile.adjacency] =
-            validIdsForDirection;
-        }
+    const cleanedExclusions = tile.exclusions.filter((exclusion) => {
+      const isValid = validIds.has(exclusion.targetTileId);
+      if (!isValid) {
+        console.warn(
+          `Tile "${tile.id}" references non-existent tile "${exclusion.targetTileId}" in exclusions. Removing reference.`
+        );
       }
-    }
+      return isValid;
+    });
 
     return {
       ...tile,
-      adjacency: cleanedAdjacency,
+      exclusions: cleanedExclusions,
     };
   });
 }
 
 /**
  * Strips out the 'model' property from tile configs for sending to Web Workers
- * Web Workers can't receive functions, so we only send the metadata (id, weight, adjacency)
+ * Web Workers can't receive functions, so we only send the metadata (id, weight, connectors, exclusions)
  *
  * @param tiles - Array of tile configurations
  * @returns Array of tile configs with only serializable properties
@@ -63,10 +49,11 @@ export function validateTileAdjacency<T extends ModelTile3DConfig>(
 export function prepareTilesForWorker<T extends ModelTile3DConfig>(
   tiles: T[]
 ): Omit<ModelTile3DConfig, "model">[] {
-  return tiles.map(({ id, weight, adjacency }) => ({
+  return tiles.map(({ id, weight, connectors, exclusions }) => ({
     id,
     weight,
-    adjacency,
+    connectors,
+    exclusions,
   }));
 }
 
@@ -215,7 +202,8 @@ export interface GLTFToTilesOptions {
  *
  * Expected userData structure on meshes:
  * - `tileId` (string): Custom tile ID (optional, falls back to mesh name)
- * - `adjacency` (object): Adjacency rules (e.g., { north: ['tile1', 'tile2'], south: [...] })
+ * - `connectors` (object): Connector data for all six faces
+ * - `exclusions` (array): Directional exclusion rules
  * - `weight` (number): Tile weight for WFC probability (default: 1)
  */
 export function gltfObjectToTiles(
@@ -275,17 +263,27 @@ export function gltfObjectToTiles(
     const tileId =
       userTileId || (idPrefix ? `${idPrefix}_${meshName}` : meshName);
 
-    // Extract adjacency and weight from mesh userData
-    const adjacency = mesh.userData.adjacency || {};
+    // Extract connectors, exclusions, and weight from mesh userData
+    const connectors = mesh.userData.connectors;
+    const exclusions = mesh.userData.exclusions || [];
     const weight =
       (mesh.userData.weight as number | undefined) ?? defaultWeight;
+
+    // Skip if no connectors defined
+    if (!connectors) {
+      console.warn(
+        `Mesh "${meshName}" has no connectors in userData. Skipping.`
+      );
+      return;
+    }
 
     // Build the config
     const config: ModelTile3DConfig = {
       id: tileId,
       model: mesh,
       weight,
-      adjacency,
+      connectors,
+      exclusions,
     };
 
     // Add optional transform properties if provided

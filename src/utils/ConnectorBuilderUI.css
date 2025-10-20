@@ -7,10 +7,41 @@
   max-height: 100vh;
   background: rgba(0, 0, 0, 0.85);
   padding: 20px;
-  max-width: 500px;
+  width: 500px;
+  min-width: 300px;
+  max-width: 800px;
   overflow-y: auto;
   font-family: monospace;
   z-index: 100;
+}
+
+#connector-ui-resize-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 8px;
+  height: 100%;
+  cursor: ew-resize;
+  background: transparent;
+  transition: background 0.2s;
+  z-index: 101;
+}
+
+#connector-ui-resize-handle:hover,
+#connector-ui-resize-handle.resizing {
+  background: rgba(59, 130, 246, 0.5);
+}
+
+#connector-ui-resize-handle::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 40px;
+  background: rgba(148, 163, 184, 0.5);
+  border-radius: 1px;
 }
 
 #connector-ui * {

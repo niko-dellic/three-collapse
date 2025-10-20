@@ -36,12 +36,14 @@ export { InstancedModelRenderer, type TileInstance } from "./renderers";
 
 // Utilities
 export {
-  validateTileAdjacency,
+  validateTileExclusions,
   prepareTilesForWorker,
   createAirTile,
   createBoxTile,
   createSphereTile,
   createCylinderTile,
+  convertAdjacencyToConnectors,
+  needsConnectorConversion,
   WorkerPool,
   splitGridIntoRegions,
   getBoundaryCells,

@@ -231,22 +231,17 @@ export class InstancedModelRenderer {
   addTileInstance(tileId: string, x: number, y: number, z: number): void {
     const positionKey = this.coordToKey(x, y, z);
 
-    // Safeguard: Check if a tile already exists at this position
+    // ATOMIC: Test-and-set to prevent race conditions in multi-worker environments
+    // Check for duplicate renders (first writer wins)
     const existingTileId = this.renderedPositions.get(positionKey);
-    if (existingTileId) {
-      if (existingTileId === tileId) {
-        // Same tile type at same position - skip silently
-        return;
-      } else {
-        // Different tile type at same position - warn and skip
-        console.warn(
-          `⚠️  Duplicate render at (${x}, ${y}, ${z}): tried "${tileId}" but "${existingTileId}" already there`
-        );
-        return;
-      }
+    if (existingTileId !== undefined) {
+      console.warn(
+        `⚠️ Duplicate render at (${x},${y},${z}): tried "${tileId}" but "${existingTileId}" already there`
+      );
+      return;
     }
 
-    // Track this position as rendered
+    // Record this position as rendered
     this.renderedPositions.set(positionKey, tileId);
 
     // Get or create instance data array for this tile type

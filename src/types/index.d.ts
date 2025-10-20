@@ -132,3 +132,33 @@ export interface DebugUIElements {
   progressElement?: HTMLDivElement;
   tilesetEditor?: TilesetEditorElements;
 }
+
+/**
+ * Connector data for face-based tile matching
+ * Based on Marian42's WFC blog approach
+ */
+export interface ConnectorData {
+  groupId: string;
+  symmetry?: "flipped" | "not-flipped" | "symmetric"; // horizontal faces
+  rotation?: 0 | 1 | 2 | 3 | "invariant"; // vertical faces
+}
+
+/**
+ * Connectors for all six faces of a tile
+ */
+export interface TileConnectors {
+  up: ConnectorData;
+  down: ConnectorData;
+  north: ConnectorData;
+  south: ConnectorData;
+  east: ConnectorData;
+  west: ConnectorData;
+}
+
+/**
+ * Directional exclusion rule (prevents specific tile pairs)
+ */
+export interface DirectionalExclusion {
+  targetTileId: string;
+  direction: "up" | "down" | "north" | "south" | "east" | "west";
+}

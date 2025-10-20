@@ -3,6 +3,14 @@ import { WFCGenerator } from "../../src/generators/WFCGenerator";
 import { createScene } from "../SceneSetup";
 import { mixedModelTileset } from "../tiles/models/tileset";
 
+/**
+ * Models Demo - Using connector-based WFC system
+ *
+ * This demo uses the auto-converted mixedModelTileset which was originally
+ * defined with legacy adjacency rules but is now converted to connectors
+ * using the convertAdjacencyToConnectors helper.
+ */
+
 // Simple demo class for mixed models
 class ModelsDemo {
   public scene!: THREE.Scene;

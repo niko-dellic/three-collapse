@@ -1,18 +1,29 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import type { ModelTile3DConfig } from "../wfc3d";
-import type { LoadedModelData } from "./GLBTileLoader";
+import type {
+  ModelTile3DConfig,
+  TileConnectors,
+  DirectionalExclusion,
+} from "../wfc3d";
 
 export interface GLBAdjacencyData {
   configs: ModelTile3DConfig[];
   scene: THREE.Group;
 }
 
+export interface LoadedTileData {
+  id: string;
+  object: THREE.Object3D;
+  weight: number;
+  connectors: TileConnectors;
+  exclusions: DirectionalExclusion[];
+}
+
 /**
- * Helper class to load adjacency data from GLB files exported by the adjacency builder
+ * Helper class to load connector and adjacency data from GLB files
  *
- * This loader can import adjacency configurations that were exported from the adjacency
- * builder tool, which stores tile relationships in the GLB file's userData.
+ * This loader can import tile configurations that were exported from the connector
+ * builder tool, which stores connectors, exclusions, and computed adjacency in the GLB file's userData.
  *
  * @example
  * ```typescript
@@ -21,11 +32,11 @@ export interface GLBAdjacencyData {
  * const loader = new GLBAdjacencyLoader();
  *
  * // Load from URL
- * const { configs, scene } = await loader.load("./adjacency-config.glb");
+ * const { configs, scene } = await loader.load("./connector-config.glb");
  *
  * // Or merge with existing tileset
  * const updatedTileset = await loader.loadAndMerge(
- *   "./adjacency-config.glb",
+ *   "./connector-config.glb",
  *   existingTileset
  * );
  * ```
@@ -38,76 +49,28 @@ export class GLBAdjacencyLoader {
   }
 
   /**
-   * Load a GLB file and extract adjacency configuration
+   * Load a GLB file and extract connector configuration
    *
    * @param url - Path to the GLB file
-   * @returns Promise resolving to adjacency data and scene
-   * @throws Error if no adjacency data is found in the GLB file
+   * @returns Promise resolving to connector data and scene
+   * @throws Error if no connector data is found in the GLB file
    */
   async load(url: string): Promise<GLBAdjacencyData> {
     return new Promise((resolve, reject) => {
       this.loader.load(
         url,
         (gltf) => {
-          const scene = gltf.scene;
-          const adjacencyData = scene.userData.adjacencyData;
+          const configs = this.extractConfigsFromScene(gltf.scene);
 
-          if (!adjacencyData) {
-            reject(new Error("No adjacency data found in GLB file"));
+          if (configs.length === 0) {
+            reject(new Error("No connector data found in GLB file meshes"));
             return;
           }
 
-          const configs: ModelTile3DConfig[] = [];
-
-          // Extract tile data from scene userData
-          for (const [tileId, data] of Object.entries(adjacencyData)) {
-            const tileData = data as any;
-
-            const config: ModelTile3DConfig = {
-              id: tileId,
-              weight: tileData.weight || 1,
-              // For now, we can't reconstruct the original model path or function
-              // So we use a placeholder - users will need to map this manually
-              model: `[Reconstructed from GLB: ${tileId}]`,
-              adjacency: {
-                up:
-                  tileData.adjacency.up?.length > 0
-                    ? tileData.adjacency.up
-                    : undefined,
-                down:
-                  tileData.adjacency.down?.length > 0
-                    ? tileData.adjacency.down
-                    : undefined,
-                north:
-                  tileData.adjacency.north?.length > 0
-                    ? tileData.adjacency.north
-                    : undefined,
-                south:
-                  tileData.adjacency.south?.length > 0
-                    ? tileData.adjacency.south
-                    : undefined,
-                east:
-                  tileData.adjacency.east?.length > 0
-                    ? tileData.adjacency.east
-                    : undefined,
-                west:
-                  tileData.adjacency.west?.length > 0
-                    ? tileData.adjacency.west
-                    : undefined,
-              },
-            };
-
-            // Remove empty adjacency
-            if (
-              Object.values(config.adjacency!).every((v) => v === undefined)
-            ) {
-              config.adjacency = {};
-            }
-
-            configs.push(config);
-          }
-
-          resolve({ configs, scene });
+          resolve({
+            configs,
+            scene: gltf.scene,
+          });
         },
         undefined,
         (error) => {
@@ -118,219 +81,122 @@ export class GLBAdjacencyLoader {
   }
 
   /**
-   * Load from a File object (for file upload)
-   *
-   * @param file - File object from file input
-   * @returns Promise resolving to adjacency data and scene
+   * Extract ModelTile3DConfig from a loaded scene by reading mesh userData
    */
-  async loadFromFile(file: File): Promise<GLBAdjacencyData> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
+  private extractConfigsFromScene(scene: THREE.Group): ModelTile3DConfig[] {
+    const configs: ModelTile3DConfig[] = [];
 
-      reader.onload = async (e) => {
-        try {
-          const arrayBuffer = e.target?.result as ArrayBuffer;
-          if (!arrayBuffer) {
-            reject(new Error("Failed to read file"));
-            return;
-          }
+    scene.traverse((child) => {
+      if (child instanceof THREE.Mesh && child.userData.connectors) {
+        const config: ModelTile3DConfig = {
+          id: child.userData.tileId || child.name || `tile_${configs.length}`,
+          weight: child.userData.weight || 1,
+          model: child, // Use the mesh object directly
+          connectors: child.userData.connectors as TileConnectors,
+          exclusions:
+            (child.userData.exclusions as DirectionalExclusion[]) || [],
+        };
 
-          // Parse the GLB directly from ArrayBuffer
-          this.loader.parse(
-            arrayBuffer,
-            "",
-            (gltf) => {
-              const scene = gltf.scene;
-              const adjacencyData = scene.userData.adjacencyData;
-
-              if (!adjacencyData) {
-                reject(new Error("No adjacency data found in GLB file"));
-                return;
-              }
-
-              const configs: ModelTile3DConfig[] = [];
-
-              // Extract tile data from scene userData
-              for (const [tileId, data] of Object.entries(adjacencyData)) {
-                const tileData = data as any;
-
-                const config: ModelTile3DConfig = {
-                  id: tileId,
-                  weight: tileData.weight || 1,
-                  model: `[Reconstructed from GLB: ${tileId}]`,
-                  adjacency: {
-                    up:
-                      tileData.adjacency.up?.length > 0
-                        ? tileData.adjacency.up
-                        : undefined,
-                    down:
-                      tileData.adjacency.down?.length > 0
-                        ? tileData.adjacency.down
-                        : undefined,
-                    north:
-                      tileData.adjacency.north?.length > 0
-                        ? tileData.adjacency.north
-                        : undefined,
-                    south:
-                      tileData.adjacency.south?.length > 0
-                        ? tileData.adjacency.south
-                        : undefined,
-                    east:
-                      tileData.adjacency.east?.length > 0
-                        ? tileData.adjacency.east
-                        : undefined,
-                    west:
-                      tileData.adjacency.west?.length > 0
-                        ? tileData.adjacency.west
-                        : undefined,
-                  },
-                };
-
-                if (
-                  Object.values(config.adjacency!).every((v) => v === undefined)
-                ) {
-                  config.adjacency = {};
-                }
-
-                configs.push(config);
-              }
-
-              resolve({ configs, scene: gltf.scene });
-            },
-            (error) => {
-              reject(error);
-            }
-          );
-        } catch (error) {
-          reject(error);
-        }
-      };
-
-      reader.onerror = () => {
-        reject(new Error("Failed to read file"));
-      };
-
-      reader.readAsArrayBuffer(file);
+        configs.push(config);
+      }
     });
+
+    return configs;
   }
 
   /**
-   * Load and merge with existing tileset
-   *
-   * Useful for importing adjacency data and mapping to actual model paths.
-   * This updates the weight and adjacency properties of matching tiles in the existing tileset.
+   * Load a GLB file and merge its configs with an existing tileset
    *
    * @param url - Path to the GLB file
-   * @param existingTileset - Existing tileset to merge adjacency data into
-   * @returns Promise resolving to updated tileset
-   *
-   * @example
-   * ```typescript
-   * const loader = new GLBAdjacencyLoader();
-   * const myTileset = [
-   *   { id: "block", model: "./models/block.glb", weight: 1, adjacency: {} },
-   *   { id: "air", model: "./models/air.glb", weight: 5, adjacency: {} }
-   * ];
-   *
-   * // Load adjacency rules from GLB and apply to tileset
-   * const updated = await loader.loadAndMerge("./adjacency-config.glb", myTileset);
-   * ```
+   * @param existingTileset - Existing tile configurations
+   * @returns Promise resolving to merged tileset
    */
   async loadAndMerge(
     url: string,
     existingTileset: ModelTile3DConfig[]
   ): Promise<ModelTile3DConfig[]> {
     const { configs } = await this.load(url);
-
-    const tileMap = new Map(existingTileset.map((t) => [t.id, t]));
-
-    // Merge adjacency data into existing tileset
-    for (const importedConfig of configs) {
-      const existingTile = tileMap.get(importedConfig.id);
-      if (existingTile) {
-        // Update weight and adjacency from imported data
-        existingTile.weight = importedConfig.weight;
-        existingTile.adjacency = importedConfig.adjacency;
-      }
-    }
-
-    return existingTileset;
+    return this.mergeTilesets(existingTileset, configs);
   }
 
   /**
-   * Apply adjacency data to a tileset with model paths, optionally using pre-loaded models
+   * Parse GLB data from ArrayBuffer
    *
-   * This method is useful when you want to load adjacency configuration from a GLB
-   * and apply it to tiles with actual model paths, potentially using already-loaded model data
-   * to avoid reloading.
-   *
-   * @param url - Path to the adjacency GLB file
-   * @param modelPathMap - Map of tile IDs to model file paths
-   * @param loadedModels - Optional map of already loaded model data (from GLBTileLoader)
-   * @returns Promise resolving to complete tileset with models and adjacencies
-   *
-   * @example
-   * ```typescript
-   * import { GLBAdjacencyLoader, GLBTileLoader } from "three-collapse";
-   *
-   * // Option 1: Without pre-loaded models
-   * const adjLoader = new GLBAdjacencyLoader();
-   * const tileset = await adjLoader.applyToModels(
-   *   "./adjacency-config.glb",
-   *   {
-   *     "block": "./models/block.glb",
-   *     "air": "./models/air.glb"
-   *   }
-   * );
-   *
-   * // Option 2: With pre-loaded models (more efficient)
-   * const tileLoader = new GLBTileLoader();
-   * const modelData = await tileLoader.loadTileset([
-   *   { id: "block", model: "./models/block.glb" },
-   *   { id: "air", model: "./models/air.glb" }
-   * ]);
-   *
-   * const tileset = await adjLoader.applyToModels(
-   *   "./adjacency-config.glb",
-   *   {
-   *     "block": "./models/block.glb",
-   *     "air": "./models/air.glb"
-   *   },
-   *   modelData
-   * );
-   * ```
+   * @param arrayBuffer - GLB file data
+   * @returns Promise resolving to connector data and scene
    */
-  async applyToModels(
-    url: string,
-    modelPathMap: { [tileId: string]: string },
-    loadedModels?: Map<string, LoadedModelData>
-  ): Promise<ModelTile3DConfig[]> {
-    const { configs } = await this.load(url);
+  async parseFromBuffer(arrayBuffer: ArrayBuffer): Promise<GLBAdjacencyData> {
+    return new Promise((resolve, reject) => {
+      this.loader.parse(
+        arrayBuffer,
+        "",
+        (gltf) => {
+          const configs = this.extractConfigsFromScene(gltf.scene);
 
-    // Note: loadedModels parameter is available for future optimization
-    // Currently, the GLBTileLoader handles caching internally when you call loadTileset()
-    // This parameter is here for API consistency and potential future use cases
-    if (loadedModels) {
-      // Models are already loaded and cached by GLBTileLoader
-      // No additional processing needed here
+          if (configs.length === 0) {
+            reject(new Error("No connector data found in GLB file meshes"));
+            return;
+          }
+
+          resolve({
+            configs,
+            scene: gltf.scene,
+          });
+        },
+        (error) => {
+          reject(error);
+        }
+      );
+    });
+  }
+
+  /**
+   * Merge two tilesets, with the new tileset taking precedence for duplicates
+   *
+   * @param existingTileset - Current tileset
+   * @param newTileset - New tileset to merge in
+   * @returns Merged tileset
+   */
+  mergeTilesets(
+    existingTileset: ModelTile3DConfig[],
+    newTileset: ModelTile3DConfig[]
+  ): ModelTile3DConfig[] {
+    const merged = new Map<string, ModelTile3DConfig>();
+
+    // Add existing tiles
+    for (const tile of existingTileset) {
+      merged.set(tile.id, tile);
     }
 
-    // Build tileset with actual model paths
-    const tileset: ModelTile3DConfig[] = configs.map((config) => {
-      const modelPath = modelPathMap[config.id];
+    // Override with new tiles
+    for (const tile of newTileset) {
+      merged.set(tile.id, tile);
+    }
 
-      if (!modelPath) {
-        console.warn(
-          `No model path provided for tile "${config.id}", using placeholder`
-        );
+    return Array.from(merged.values());
+  }
+
+  /**
+   * Extract loaded models with their connector data
+   *
+   * @param gltf - Loaded GLTF object
+   * @returns Array of loaded models with their data
+   */
+  extractLoadedModels(gltf: any): LoadedTileData[] {
+    const models: LoadedTileData[] = [];
+
+    gltf.scene.traverse((child: THREE.Object3D) => {
+      if (child instanceof THREE.Mesh && child.userData.connectors) {
+        models.push({
+          id: child.userData.tileId || child.name,
+          object: child,
+          weight: child.userData.weight || 1,
+          connectors: child.userData.connectors,
+          exclusions: child.userData.exclusions || [],
+        });
       }
-
-      return {
-        ...config,
-        model: modelPath || config.model,
-      };
     });
 
-    return tileset;
+    return models;
   }
 }

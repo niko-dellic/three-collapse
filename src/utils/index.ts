@@ -1,5 +1,5 @@
 export {
-  validateTileAdjacency,
+  validateTileExclusions,
   prepareTilesForWorker,
   createAirTile,
   createBoxTile,
@@ -8,6 +8,11 @@ export {
   gltfObjectToTiles,
   type GLTFToTilesOptions,
 } from "./TileHelpers";
+
+export {
+  convertAdjacencyToConnectors,
+  needsConnectorConversion,
+} from "./AdjacencyConverter";
 
 export { WorkerPool, type WorkerTask, type WorkerResponse } from "./WorkerPool";
 

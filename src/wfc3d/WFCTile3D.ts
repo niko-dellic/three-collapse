@@ -1,84 +1,68 @@
 import * as THREE from "three";
-
-/**
- * Helper types for mutually exclusive direction rules
- */
-type UpRule = { up?: string[]; upEx?: never } | { up?: never; upEx?: string[] };
-type DownRule =
-  | { down?: string[]; downEx?: never }
-  | { down?: never; downEx?: string[] };
-type NorthRule =
-  | { north?: string[]; northEx?: never }
-  | { north?: never; northEx?: string[] };
-type SouthRule =
-  | { south?: string[]; southEx?: never }
-  | { south?: never; southEx?: string[] };
-type EastRule =
-  | { east?: string[]; eastEx?: never }
-  | { east?: never; eastEx?: string[] };
-type WestRule =
-  | { west?: string[]; westEx?: never }
-  | { west?: never; westEx?: string[] };
-type AllRule =
-  | { all?: string[]; allEx?: never }
-  | { all?: never; allEx?: string[] };
-
-/**
- * Adjacency rules with mutual exclusivity enforced per direction
- *
- * Base Rules (applied to all faces):
- * - `all`: Include these tiles on all faces (can be overridden per face)
- * - `allEx`: Exclude these tiles from all faces (can be overridden per face)
- *
- * Per-Face Rules (override base rules):
- * - `up/down/north/south/east/west`: Inclusive rules for specific faces
- * - `upEx/downEx/northEx/southEx/eastEx/westEx`: Exclusive rules for specific faces
- *
- * You can specify EITHER inclusive OR exclusive for each direction, not both.
- * Individual face rules override the base `all` or `allEx` rule.
- */
-type AdjacencyRules = AllRule &
-  UpRule &
-  DownRule &
-  NorthRule &
-  SouthRule &
-  EastRule &
-  WestRule;
+import type {
+  ConnectorData,
+  TileConnectors,
+  DirectionalExclusion,
+} from "../types";
 
 /**
  * Base configuration for 3D tiles in Wave Function Collapse
- * Supports 6-way adjacency (up, down, north, south, east, west)
+ * Uses connector-based adjacency following the Marian42 WFC blog approach
  *
- * Adjacency Rules:
- * - Base rules: `all` or `allEx` apply to all faces
- * - Per-face rules: `up`, `down`, `north`, `south`, `east`, `west` (or their `Ex` variants)
- * - Per-face rules override base rules for that specific face
+ * Connectors:
+ * - Each face has a connector with groupId, symmetry (horizontal faces), or rotation (vertical faces)
+ * - Tiles can connect if their facing connectors have matching groupIds and compatible symmetry/rotation
  *
- * Rule Types:
- * - Inclusive (all, up, down, etc.): Only these tiles are allowed
- * - Exclusive (allEx, upEx, downEx, etc.): All tiles EXCEPT these are allowed
- *
- * Note: You CANNOT specify both inclusive and exclusive for the same direction.
- * TypeScript will show an error if you try to mix them.
+ * Exclusions:
+ * - Directional exclusions prevent specific tile pairs from being adjacent
+ * - Applied bidirectionally during propagation
  *
  * Example:
  * ```typescript
  * {
- *   id: "grass",
- *   adjacency: {
- *     all: ["grass", "dirt"],  // Base rule for all faces
- *     up: ["air"],              // Override for up face
- *     down: ["dirt"]            // Override for down face
- *   }
+ *   id: "floor",
+ *   weight: 1,
+ *   connectors: {
+ *     up: { groupId: "floor_top", symmetry: "symmetric" },
+ *     down: { groupId: "solid", rotation: "invariant" },
+ *     north: { groupId: "floor_side", symmetry: "symmetric" },
+ *     south: { groupId: "floor_side", symmetry: "symmetric" },
+ *     east: { groupId: "floor_side", symmetry: "symmetric" },
+ *     west: { groupId: "floor_side", symmetry: "symmetric" }
+ *   },
+ *   exclusions: [
+ *     { targetTileId: "wall", direction: "up" }
+ *   ]
  * }
  * ```
  */
+/**
+ * Legacy adjacency rules (for backward compatibility with AdjacencyBuilderUI)
+ */
+type LegacyAdjacencyRules = {
+  up?: string[];
+  down?: string[];
+  north?: string[];
+  south?: string[];
+  east?: string[];
+  west?: string[];
+  upEx?: string[];
+  downEx?: string[];
+  northEx?: string[];
+  southEx?: string[];
+  eastEx?: string[];
+  westEx?: string[];
+  all?: string[];
+  allEx?: string[];
+};
+
 export interface BaseTile3DConfig {
   id: string;
   weight?: number;
-  // Adjacency rules for each of the 6 directions
-  // Direction indices: 0=up, 1=down, 2=north, 3=south, 4=east, 5=west
-  adjacency?: AdjacencyRules;
+  connectors?: TileConnectors; // Optional for backward compat with legacy tools
+  exclusions?: DirectionalExclusion[];
+  // Legacy support for old adjacency builder (not used by WFC3D)
+  adjacency?: LegacyAdjacencyRules;
 }
 
 /**
@@ -95,10 +79,9 @@ export interface ModelTile3DConfig extends BaseTile3DConfig {
 export class WFCTile3D {
   id: string;
   weight: number;
-  color?: string;
+  connectors: TileConnectors;
+  exclusions: DirectionalExclusion[];
   filepath?: string;
-  adjacency: Map<number, Set<string>>;
-  adjacencyExclusive: Map<number, Set<string>>; // For exclusion rules
 
   // Direction constants
   static readonly UP = 0;
@@ -108,141 +91,110 @@ export class WFCTile3D {
   static readonly EAST = 4;
   static readonly WEST = 5;
 
+  // Direction name mapping
+  static readonly DIRECTION_NAMES = [
+    "up",
+    "down",
+    "north",
+    "south",
+    "east",
+    "west",
+  ] as const;
+
   constructor(config: ModelTile3DConfig) {
     this.id = config.id;
     this.weight = config.weight ?? 1.0;
 
+    if (!config.connectors) {
+      throw new Error(
+        `Tile '${config.id}' has no connectors. The connector-based WFC system requires all tiles to have connectors defined. Use ConnectorBuilderUI to create connector-based tilesets.`
+      );
+    }
+
+    this.connectors = config.connectors;
+    this.exclusions = config.exclusions || [];
+
     // Handle model-specific properties
-    if ("model" in config)
-      if (typeof config.model === "string") this.filepath = config.model;
+    if ("model" in config && typeof config.model === "string") {
+      this.filepath = config.model;
+    }
+  }
 
-    // Initialize adjacency maps
-    this.adjacency = new Map();
-    this.adjacencyExclusive = new Map();
+  /**
+   * Get connector for a specific direction
+   */
+  getConnector(direction: number): ConnectorData {
+    const dirName = WFCTile3D.DIRECTION_NAMES[
+      direction
+    ] as keyof TileConnectors;
+    return this.connectors[dirName];
+  }
 
-    if (config.adjacency) {
-      // Step 1: Apply base rules to all directions (if specified)
-      // These act as defaults that can be overridden per-face
-      const allDirections = [
-        WFCTile3D.UP,
-        WFCTile3D.DOWN,
-        WFCTile3D.NORTH,
-        WFCTile3D.SOUTH,
-        WFCTile3D.EAST,
-        WFCTile3D.WEST,
-      ];
+  /**
+   * Check if this tile's connector is compatible with another tile's connector
+   */
+  isConnectorCompatible(
+    myDirection: number,
+    otherTile: WFCTile3D,
+    otherDirection: number
+  ): boolean {
+    const myConnector = this.getConnector(myDirection);
+    const otherConnector = otherTile.getConnector(otherDirection);
 
-      if (config.adjacency.all !== undefined) {
-        // Apply inclusive base rule to all directions
-        const baseSet = new Set(config.adjacency.all);
-        for (const dir of allDirections) {
-          this.adjacency.set(dir, new Set(baseSet));
-        }
-      }
+    // Must have same group ID
+    if (myConnector.groupId !== otherConnector.groupId) {
+      return false;
+    }
 
-      if (config.adjacency.allEx !== undefined) {
-        // Apply exclusive base rule to all directions
-        const baseExSet = new Set(config.adjacency.allEx);
-        for (const dir of allDirections) {
-          this.adjacencyExclusive.set(dir, new Set(baseExSet));
-        }
-      }
+    const isVertical =
+      myDirection === WFCTile3D.UP || myDirection === WFCTile3D.DOWN;
 
-      // Step 2: Override with per-face inclusive rules
-      // These override the base rule for specific directions
-      if (config.adjacency.up !== undefined) {
-        // Clear any base rule for this direction first
-        this.adjacencyExclusive.delete(WFCTile3D.UP);
-        this.adjacency.set(WFCTile3D.UP, new Set(config.adjacency.up));
-      }
-      if (config.adjacency.down !== undefined) {
-        this.adjacencyExclusive.delete(WFCTile3D.DOWN);
-        this.adjacency.set(WFCTile3D.DOWN, new Set(config.adjacency.down));
-      }
-      if (config.adjacency.north !== undefined) {
-        this.adjacencyExclusive.delete(WFCTile3D.NORTH);
-        this.adjacency.set(WFCTile3D.NORTH, new Set(config.adjacency.north));
-      }
-      if (config.adjacency.south !== undefined) {
-        this.adjacencyExclusive.delete(WFCTile3D.SOUTH);
-        this.adjacency.set(WFCTile3D.SOUTH, new Set(config.adjacency.south));
-      }
-      if (config.adjacency.east !== undefined) {
-        this.adjacencyExclusive.delete(WFCTile3D.EAST);
-        this.adjacency.set(WFCTile3D.EAST, new Set(config.adjacency.east));
-      }
-      if (config.adjacency.west !== undefined) {
-        this.adjacencyExclusive.delete(WFCTile3D.WEST);
-        this.adjacency.set(WFCTile3D.WEST, new Set(config.adjacency.west));
-      }
+    if (isVertical) {
+      // Vertical faces (up/down): check rotation
+      const rotA = myConnector.rotation;
+      const rotB = otherConnector.rotation;
 
-      // Step 3: Override with per-face exclusive rules
-      // These override the base rule for specific directions
-      if (config.adjacency.upEx !== undefined) {
-        // Clear any base rule for this direction first
-        this.adjacency.delete(WFCTile3D.UP);
-        this.adjacencyExclusive.set(
-          WFCTile3D.UP,
-          new Set(config.adjacency.upEx)
-        );
-      }
-      if (config.adjacency.downEx !== undefined) {
-        this.adjacency.delete(WFCTile3D.DOWN);
-        this.adjacencyExclusive.set(
-          WFCTile3D.DOWN,
-          new Set(config.adjacency.downEx)
-        );
-      }
-      if (config.adjacency.northEx !== undefined) {
-        this.adjacency.delete(WFCTile3D.NORTH);
-        this.adjacencyExclusive.set(
-          WFCTile3D.NORTH,
-          new Set(config.adjacency.northEx)
-        );
-      }
-      if (config.adjacency.southEx !== undefined) {
-        this.adjacency.delete(WFCTile3D.SOUTH);
-        this.adjacencyExclusive.set(
-          WFCTile3D.SOUTH,
-          new Set(config.adjacency.southEx)
-        );
-      }
-      if (config.adjacency.eastEx !== undefined) {
-        this.adjacency.delete(WFCTile3D.EAST);
-        this.adjacencyExclusive.set(
-          WFCTile3D.EAST,
-          new Set(config.adjacency.eastEx)
-        );
-      }
-      if (config.adjacency.westEx !== undefined) {
-        this.adjacency.delete(WFCTile3D.WEST);
-        this.adjacencyExclusive.set(
-          WFCTile3D.WEST,
-          new Set(config.adjacency.westEx)
-        );
-      }
+      return rotA === "invariant" || rotB === "invariant" || rotA === rotB;
+    } else {
+      // Horizontal faces (north/south/east/west): check symmetry
+      const symA = myConnector.symmetry!;
+      const symB = otherConnector.symmetry!;
+
+      return (
+        symA === "symmetric" ||
+        symB === "symmetric" ||
+        (symA === "flipped" && symB === "not-flipped") ||
+        (symA === "not-flipped" && symB === "flipped")
+      );
     }
   }
 
   /**
    * Check if this tile can be adjacent to another tile in a given direction
-   * TypeScript ensures only one of (inclusive, exclusive) is set per direction
+   * considering both connector compatibility and exclusions
    */
-  canBeAdjacentTo(tileId: string, direction: number): boolean {
-    // Check inclusive rules
-    const allowed = this.adjacency.get(direction);
-    if (allowed !== undefined) {
-      return allowed.has(tileId);
+  canBeAdjacentTo(otherTile: WFCTile3D, direction: number): boolean {
+    const oppositeDir = WFCTile3D.getOppositeDirection(direction);
+
+    // Check connector compatibility
+    if (!this.isConnectorCompatible(direction, otherTile, oppositeDir)) {
+      return false;
     }
 
-    // Check exclusive rules (mutually exclusive with inclusive via TypeScript)
-    const excluded = this.adjacencyExclusive.get(direction);
-    if (excluded !== undefined) {
-      return !excluded.has(tileId); // Inverted logic: return true if NOT in exclusion list
-    }
+    // Check exclusions (bidirectional)
+    const hasExclusion = this.exclusions.some(
+      (ex) =>
+        ex.targetTileId === otherTile.id &&
+        ex.direction === WFCTile3D.DIRECTION_NAMES[direction]
+    );
 
-    // No constraints means all tiles allowed
-    return true;
+    const hasReverseExclusion = otherTile.exclusions.some(
+      (ex) =>
+        ex.targetTileId === this.id &&
+        ex.direction === WFCTile3D.DIRECTION_NAMES[oppositeDir]
+    );
+
+    return !hasExclusion && !hasReverseExclusion;
   }
 
   /**

@@ -67,6 +67,29 @@ async function loadTilesFromGLBFolder(): Promise<ModelTile3DConfig[]> {
     `\n📦 Loaded ${tiles.length} tiles (${tilesWithAdjacencies} with adjacency data)\n`
   );
 
+  // ⚠️ CRITICAL: Check if tiles have connectors
+  console.log("🔍 Checking tile configuration:");
+  const tilesWithConnectors = tiles.filter((tile) => tile.connectors);
+  const tilesWithAdjacency = tiles.filter((tile) => tile.adjacency);
+  console.log(
+    `  - Tiles with connectors: ${tilesWithConnectors.length}/${tiles.length}`
+  );
+  console.log(
+    `  - Tiles with adjacency (legacy): ${tilesWithAdjacency.length}/${tiles.length}`
+  );
+
+  if (tilesWithConnectors.length === 0 && tilesWithAdjacency.length > 0) {
+    console.warn("  ⚠️  WARNING: Tiles have adjacency but no connectors!");
+    console.warn("  ⚠️  The new WFC system requires connectors. Converting...");
+    const { convertAdjacencyToConnectors } = await import("../../src/utils");
+    const convertedTiles = convertAdjacencyToConnectors(tiles);
+    console.log(
+      `  ✓ Converted ${convertedTiles.length} tiles to use connectors`
+    );
+    return convertedTiles;
+  }
+  console.log("");
+
   return tiles;
 }
 

@@ -16,6 +16,8 @@ export type TileUpdateCallback = (
   tileId: string
 ) => void;
 
+const debug = false;
+
 /**
  * Generate WFC grid using multiple workers for parallel processing
  */
@@ -132,23 +134,13 @@ export async function generateWithWorkers(
     return cells;
   });
 
-  // Log cell distribution
-  console.log(`Distributing cells across ${workerCount} workers:`);
-  regionCellAssignments.forEach((cells, index) => {
-    console.log(`  Worker ${index} assigned ${cells.length} cells`);
-  });
-
+  // Log summary
   const totalAssignedCells = regionCellAssignments.reduce(
     (sum, cells) => sum + cells.length,
     0
   );
-  const totalCells = width * height * depth;
   console.log(
-    `Total: ${totalAssignedCells} interior + ${
-      boundaryCells.length
-    } boundary = ${
-      totalAssignedCells + boundaryCells.length
-    } of ${totalCells} cells`
+    `Distributing across ${workerCount} workers: ${totalAssignedCells} interior + ${boundaryCells.length} boundary cells`
   );
 
   // Create tasks with specific cell assignments
@@ -239,16 +231,51 @@ async function generateBoundaries(
     tileId: string;
   }> = [];
 
+  // Helper function for weighted random selection
+  const selectWeightedTile = (possibleTileIds: string[]): string => {
+    // Calculate total weight
+    let totalWeight = 0;
+    const weights: number[] = [];
+
+    for (const tileId of possibleTileIds) {
+      const tile = wfcTiles.find((t) => t.id === tileId);
+      const weight = tile?.weight ?? 1.0;
+      weights.push(weight);
+      totalWeight += weight;
+    }
+
+    // Select based on weighted random
+    let random = Math.random() * totalWeight;
+
+    for (let i = 0; i < possibleTileIds.length; i++) {
+      random -= weights[i];
+      if (random <= 0) {
+        return possibleTileIds[i];
+      }
+    }
+
+    return possibleTileIds[possibleTileIds.length - 1];
+  };
+
   // Collapse ALL boundary cells (not just 50)
-  console.log(`Pre-collapsing ${boundaryCells.length} boundary cells...`);
+  console.log(
+    `Pre-collapsing ${boundaryCells.length} boundary cells with weighted selection...`
+  );
+
+  // Track tile usage for diagnostics
+  const boundaryTileCounts = new Map<string, number>();
+
   for (const [x, y, z] of boundaryCells) {
     const cell = wfc.buffer.getCell(x, y, z);
 
     if (cell && !cell.collapsed && cell.possibleTiles.size > 0) {
       const possibleTiles = Array.from(cell.possibleTiles);
-      const tileId =
-        possibleTiles[Math.floor(Math.random() * possibleTiles.length)];
+      // ✅ Use weighted selection instead of uniform random
+      const tileId = selectWeightedTile(possibleTiles);
       cell.collapse(tileId);
+
+      // Track usage
+      boundaryTileCounts.set(tileId, (boundaryTileCounts.get(tileId) || 0) + 1);
 
       // Propagate constraints to neighbors
       wfc.propagate(x, y, z);
@@ -262,8 +289,21 @@ async function generateBoundaries(
     }
   }
   console.log(
-    `Pre-collapsed ${preCollapsed.length} boundary cells successfully`
+    `Pre-collapsed ${preCollapsed.length} boundary cells successfully (weighted)`
   );
+
+  // Log boundary tile distribution
+  if (debug && boundaryTileCounts.size > 0) {
+    console.log("  Boundary tile distribution:");
+    const sortedEntries = Array.from(boundaryTileCounts.entries()).sort(
+      (a, b) => b[1] - a[1]
+    );
+    for (const [tileId, count] of sortedEntries) {
+      const tile = wfcTiles.find((t) => t.id === tileId);
+      const weight = tile?.weight ?? 1.0;
+      console.log(`    ${tileId}: ${count} cells (weight: ${weight})`);
+    }
+  }
 
   return preCollapsed;
 }

@@ -84,6 +84,14 @@ Two connectors can connect if:
 5. Set rotation (vertical) or symmetry (horizontal)
 6. Apply to all selected tiles
 
+### Group Visibility
+
+- Each group has a visibility checkbox in the groups list
+- Hidden tiles cannot be selected or interacted with
+- Useful for focusing on specific connector groups
+- Visibility is independent per face direction
+- Hidden tiles are automatically deselected if currently selected
+
 ### Exclusion Rules
 
 Sometimes connectors match but the result doesn't look good. Use exclusions to block specific pairings:
@@ -131,6 +139,10 @@ Once connectors are configured:
 
 | Key             | Action                     |
 | --------------- | -------------------------- |
+| `1`             | Top view (camera)          |
+| `2`             | Front view (camera)        |
+| `3`             | Right side view (camera)   |
+| `4`             | Left side view (camera)    |
 | `G`             | Toggle transform/move mode |
 | `ESC`           | Deselect all / Close modal |
 | `Shift + Click` | Multi-select tiles         |

@@ -2,7 +2,11 @@ import { ModelTile3DConfig, WFCTile3D } from "../wfc3d/WFCTile3D";
 
 export interface ValidationIssue {
   severity: "error" | "warning";
-  type: "missing_adjacency" | "asymmetric" | "isolated_tile" | "unreachable";
+  type:
+    | "missing_connectors"
+    | "invalid_connector"
+    | "isolated_tile"
+    | "unreachable";
   message: string;
   tiles?: string[];
   direction?: string;
@@ -15,7 +19,7 @@ export interface ValidationResult {
 }
 
 /**
- * Validate a tileset for common WFC issues
+ * Validate a tileset for common WFC issues using connector-based system
  */
 export function validateTileset(
   configs: ModelTile3DConfig[]
@@ -26,94 +30,120 @@ export function validateTileset(
   const tiles = configs.map((config) => new WFCTile3D(config));
   const tileMap = new Map(tiles.map((t) => [t.id, t]));
 
-  // Check 1: Ensure all tiles have adjacency rules
+  // Check 1: Ensure all tiles have connectors
+  for (const config of configs) {
+    if (!config.connectors) {
+      issues.push({
+        severity: "error",
+        type: "missing_connectors",
+        message: `Tile '${config.id}' has no connectors defined`,
+        tiles: [config.id],
+      });
+      continue;
+    }
+
+    // Check 2: Validate connector structure for each face
+    const directions = [
+      { name: "up", isVertical: true },
+      { name: "down", isVertical: true },
+      { name: "north", isVertical: false },
+      { name: "south", isVertical: false },
+      { name: "east", isVertical: false },
+      { name: "west", isVertical: false },
+    ] as const;
+
+    for (const { name, isVertical } of directions) {
+      const connector = config.connectors[name];
+
+      if (!connector) {
+        issues.push({
+          severity: "error",
+          type: "invalid_connector",
+          message: `Tile '${config.id}' missing connector for ${name} face`,
+          tiles: [config.id],
+          direction: name,
+        });
+        continue;
+      }
+
+      if (!connector.groupId) {
+        issues.push({
+          severity: "error",
+          type: "invalid_connector",
+          message: `Tile '${config.id}' connector for ${name} face has no groupId`,
+          tiles: [config.id],
+          direction: name,
+        });
+      }
+
+      if (isVertical) {
+        // Vertical faces (up/down) should have rotation
+        if (connector.rotation === undefined) {
+          issues.push({
+            severity: "error",
+            type: "invalid_connector",
+            message: `Tile '${config.id}' connector for ${name} face (vertical) has no rotation property`,
+            tiles: [config.id],
+            direction: name,
+          });
+        }
+      } else {
+        // Horizontal faces (north/south/east/west) should have symmetry
+        if (connector.symmetry === undefined) {
+          issues.push({
+            severity: "error",
+            type: "invalid_connector",
+            message: `Tile '${config.id}' connector for ${name} face (horizontal) has no symmetry property`,
+            tiles: [config.id],
+            direction: name,
+          });
+        }
+      }
+    }
+
+    // Check 3: Validate exclusions reference existing tiles
+    if (config.exclusions) {
+      for (const exclusion of config.exclusions) {
+        if (!tileMap.has(exclusion.targetTileId)) {
+          issues.push({
+            severity: "warning",
+            type: "invalid_connector",
+            message: `Tile '${config.id}' has exclusion referencing non-existent tile '${exclusion.targetTileId}'`,
+            tiles: [config.id, exclusion.targetTileId],
+          });
+        }
+      }
+    }
+  }
+
+  // Check 4: Find isolated tiles (tiles with no compatible neighbors)
   for (const tile of tiles) {
-    if (tile.adjacency.size === 0) {
+    let hasCompatibleNeighbor = false;
+
+    for (let dir = 0; dir < 6; dir++) {
+      for (const otherTile of tiles) {
+        if (tile.id === otherTile.id) continue;
+
+        if (tile.canBeAdjacentTo(otherTile, dir)) {
+          hasCompatibleNeighbor = true;
+          break;
+        }
+      }
+
+      if (hasCompatibleNeighbor) break;
+    }
+
+    if (!hasCompatibleNeighbor) {
       issues.push({
         severity: "warning",
-        type: "missing_adjacency",
-        message: `Tile '${tile.id}' has no adjacency rules (will accept all neighbors)`,
+        type: "isolated_tile",
+        message: `Tile '${tile.id}' has no compatible neighbors in any direction`,
         tiles: [tile.id],
       });
     }
   }
 
-  // Check 2: Verify adjacency symmetry (STRICT - this is critical for WFC)
-  const directions = [
-    { dir: 0, name: "up", opposite: 1, oppositeName: "down" },
-    { dir: 1, name: "down", opposite: 0, oppositeName: "up" },
-    { dir: 2, name: "north", opposite: 3, oppositeName: "south" },
-    { dir: 3, name: "south", opposite: 2, oppositeName: "north" },
-    { dir: 4, name: "east", opposite: 5, oppositeName: "west" },
-    { dir: 5, name: "west", opposite: 4, oppositeName: "east" },
-  ];
-
-  for (const tile of tiles) {
-    for (const { dir, name, opposite, oppositeName } of directions) {
-      const neighbors = tile.adjacency.get(dir);
-      if (!neighbors) continue; // No constraints in this direction
-
-      for (const neighborId of neighbors) {
-        const neighbor = tileMap.get(neighborId);
-        if (!neighbor) {
-          issues.push({
-            severity: "error",
-            type: "missing_adjacency",
-            message: `Tile '${tile.id}' references non-existent tile '${neighborId}' in ${name} direction`,
-            tiles: [tile.id, neighborId],
-            direction: name,
-          });
-          continue;
-        }
-
-        // Check if the adjacency is symmetric
-        const reverseNeighbors = neighbor.adjacency.get(opposite);
-
-        // If reverse direction has constraints but doesn't include this tile, it's an ERROR
-        if (reverseNeighbors && !reverseNeighbors.has(tile.id)) {
-          issues.push({
-            severity: "error", // Changed from "warning" to "error"
-            type: "asymmetric",
-            message: `ASYMMETRY: '${tile.id}' allows '${neighborId}' in ${name} direction, but '${neighborId}' does NOT allow '${tile.id}' in ${oppositeName} direction. This will cause contradictions!`,
-            tiles: [tile.id, neighborId],
-            direction: name,
-          });
-
-          suggestions.push(
-            `Fix: Add '${tile.id}' to tile '${neighborId}' adjacency.${oppositeName} array`
-          );
-        }
-
-        // If reverse direction has NO constraints (undefined), it's okay (means all tiles allowed)
-        // This is fine and won't cause issues
-      }
-    }
-  }
-
-  // Check 3: Find isolated tiles (tiles with empty adjacency arrays)
-  // Empty array [] = no tiles allowed in that direction (strict restriction)
-  // Omitting the direction = all tiles allowed (no restriction)
-  for (const tile of tiles) {
-    for (const { dir, name } of directions) {
-      const neighbors = tile.adjacency.get(dir);
-      // If direction is explicitly set with empty array, flag as error
-      if (neighbors && neighbors.size === 0) {
-        issues.push({
-          severity: "error",
-          type: "isolated_tile",
-          message: `Tile '${tile.id}' has empty adjacency list [] in ${name} direction - no tiles can be placed there. This will cause contradictions unless intentional.`,
-          tiles: [tile.id],
-          direction: name,
-        });
-
-        suggestions.push(
-          `If '${tile.id}' should allow tiles in ${name} direction, add tile IDs to the array. If it should allow ALL tiles, omit the '${name}' property entirely.`
-        );
-      }
-    }
-  }
-
-  // Check 4: Ensure all tiles are reachable from each other
+  // Check 5: Ensure all tiles are reachable from each other
   const reachability = checkReachability(tiles);
   if (reachability.unreachableTiles.length > 0) {
     issues.push({
@@ -127,29 +157,27 @@ export function validateTileset(
   }
 
   // Generate suggestions
-  if (issues.some((i) => i.type === "asymmetric")) {
-    if (suggestions.length === 0) {
-      suggestions.push(
-        "CRITICAL: Asymmetric adjacency rules WILL cause WFC failures. Fix all asymmetry errors before generating."
-      );
-    }
+  if (issues.some((i) => i.type === "invalid_connector")) {
+    suggestions.push(
+      "Ensure all connectors have groupId, and correct symmetry/rotation properties"
+    );
   }
 
   if (issues.some((i) => i.type === "isolated_tile")) {
     suggestions.push(
-      "Isolated tiles with empty adjacency will cause contradictions"
+      "Isolated tiles will never be placed. Check connector groupIds and symmetry/rotation values."
     );
   }
 
   if (issues.length === 0) {
     suggestions.push(
-      "✅ Tileset validation passed! All adjacency rules are symmetric."
+      "✅ Tileset validation passed! All connectors are properly defined."
     );
   }
 
-  // Add note about adjacency specification
+  // Add note about connector system
   suggestions.push(
-    "Note: Omit a direction entirely for 'no restrictions'. Use empty array [] for 'no tiles allowed'."
+    "Note: Connectors use groupId matching. Vertical faces use rotation (0-3 or invariant), horizontal faces use symmetry (flipped/not-flipped/symmetric)."
   );
 
   const hasErrors = issues.some((i) => i.severity === "error");
@@ -177,22 +205,29 @@ export function validateTileset(
 }
 
 /**
- * Check if all tiles can reach each other through adjacency
+ * Check if all tiles can reach each other through connector compatibility
  */
 function checkReachability(tiles: WFCTile3D[]): {
   unreachableTiles: string[];
 } {
   if (tiles.length === 0) return { unreachableTiles: [] };
 
-  // Build adjacency graph
+  // Build adjacency graph based on connector compatibility
   const graph = new Map<string, Set<string>>();
+
   for (const tile of tiles) {
     const neighbors = new Set<string>();
-    for (const adjacentSet of tile.adjacency.values()) {
-      for (const id of adjacentSet) {
-        neighbors.add(id);
+
+    for (let dir = 0; dir < 6; dir++) {
+      for (const otherTile of tiles) {
+        if (tile.id === otherTile.id) continue;
+
+        if (tile.canBeAdjacentTo(otherTile, dir)) {
+          neighbors.add(otherTile.id);
+        }
       }
     }
+
     graph.set(tile.id, neighbors);
   }
 
@@ -233,12 +268,16 @@ export function getCompatibilityMatrix(
   for (const tile of tiles) {
     const tileCompat = new Map<string, Set<number>>();
 
-    for (const [direction, neighbors] of tile.adjacency.entries()) {
-      for (const neighborId of neighbors) {
-        if (!tileCompat.has(neighborId)) {
-          tileCompat.set(neighborId, new Set());
+    for (let direction = 0; direction < 6; direction++) {
+      for (const otherTile of tiles) {
+        if (tile.id === otherTile.id) continue;
+
+        if (tile.canBeAdjacentTo(otherTile, direction)) {
+          if (!tileCompat.has(otherTile.id)) {
+            tileCompat.set(otherTile.id, new Set());
+          }
+          tileCompat.get(otherTile.id)!.add(direction);
         }
-        tileCompat.get(neighborId)!.add(direction);
       }
     }
 
@@ -255,16 +294,15 @@ export function suggestFixes(result: ValidationResult): string[] {
   const fixes: string[] = [];
 
   for (const issue of result.issues) {
-    if (issue.type === "asymmetric" && issue.tiles && issue.direction) {
-      const [tile1, tile2] = issue.tiles;
+    if (issue.type === "invalid_connector" && issue.tiles && issue.direction) {
       fixes.push(
-        `Add '${tile1}' to '${tile2}'s adjacency in the opposite of ${issue.direction}`
+        `Fix connector for tile '${issue.tiles[0]}' in ${issue.direction} direction`
       );
     }
 
-    if (issue.type === "isolated_tile" && issue.tiles && issue.direction) {
+    if (issue.type === "isolated_tile" && issue.tiles) {
       fixes.push(
-        `Add at least one valid neighbor for '${issue.tiles[0]}' in ${issue.direction} direction`
+        `Check connector groupIds and properties for '${issue.tiles[0]}' to ensure it can connect to other tiles`
       );
     }
   }

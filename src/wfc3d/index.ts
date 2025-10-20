@@ -10,3 +10,10 @@ export {
   type SerializedCell,
 } from "./WFC3DBuffer";
 export { WFC3D, type WFC3DOptions, type WFC3DError } from "./WFC3D";
+
+// Re-export connector types from types
+export type {
+  ConnectorData,
+  TileConnectors,
+  DirectionalExclusion,
+} from "../types";

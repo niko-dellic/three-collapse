@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
-import JSConfetti from "js-confetti";
+// JSConfetti import removed: was only used in auto-generate which has been removed
 import { DebugGrid } from "./DebugGrid";
 import {
   pickDirectory,
@@ -87,7 +87,7 @@ export class ConnectorBuilderUI {
   private renderer: THREE.WebGLRenderer;
   private orbitControls: OrbitControls;
   private transformControls: TransformControls;
-  private jsConfetti: JSConfetti;
+  // jsConfetti removed: was only used in auto-generate which has been removed
   private debugGrid: DebugGrid;
   private raycaster: THREE.Raycaster;
   private mouse: THREE.Vector2;
@@ -111,18 +111,21 @@ export class ConnectorBuilderUI {
   private clearSelectionBtn!: HTMLButtonElement;
   private weightInput!: HTMLInputElement;
   private applyWeightBtn!: HTMLButtonElement;
+  private faceAssignmentSection!: HTMLDivElement;
+  private faceDropdowns!: Map<keyof TileConnectors, HTMLSelectElement>;
 
   // Connector Groups UI
-  private faceSelect!: HTMLSelectElement;
   private groupsList!: HTMLDivElement;
   private createGroupBtn!: HTMLButtonElement;
+  private faceSelector!: HTMLSelectElement;
   private reformGridByGroupsBtn!: HTMLButtonElement;
 
   // Symmetry & Rotation UI
   private applyRotationBtn!: HTMLButtonElement;
   private applySymmetryBtn!: HTMLButtonElement;
-  private rotationSection!: HTMLDivElement;
-  private symmetrySection!: HTMLDivElement;
+  // TODO: Will add rotation/symmetry sections back in next refactor
+  // private rotationSection!: HTMLDivElement;
+  // private symmetrySection!: HTMLDivElement;
 
   private exclusionModeCheckbox!: HTMLInputElement;
   private exclusionInfo!: HTMLDivElement;
@@ -136,33 +139,27 @@ export class ConnectorBuilderUI {
   private voxelSizeValue!: HTMLSpanElement;
   private gridRowsInput!: HTMLInputElement;
   private autoLayoutBtn!: HTMLButtonElement;
-  private autoGenerateBtn!: HTMLButtonElement;
+  // Auto-generate removed: adjacencies are computed dynamically during WFC
   private exportJsonBtn!: HTMLButtonElement;
   private exportGlbBtn!: HTMLButtonElement;
   private loadingOverlay!: HTMLDivElement;
   private selectionBox!: HTMLDivElement;
   private viewOptionsSection!: HTMLDivElement;
+  private resizeHandle!: HTMLDivElement;
 
-  // Empty groups tracking (groups with no tiles assigned)
-  private emptyGroups: Map<keyof TileConnectors, Set<string>> = new Map([
-    ["up", new Set()],
-    ["down", new Set()],
-    ["north", new Set()],
-    ["south", new Set()],
-    ["east", new Set()],
-    ["west", new Set()],
-  ]);
+  // Resize state
+  private isResizing: boolean = false;
+  private resizeStartX: number = 0;
+  private resizeStartWidth: number = 0;
 
-  // Group colors (per face direction)
-  private groupColors: Map<keyof TileConnectors, Map<string, THREE.Color>> =
-    new Map([
-      ["up", new Map()],
-      ["down", new Map()],
-      ["north", new Map()],
-      ["south", new Map()],
-      ["east", new Map()],
-      ["west", new Map()],
-    ]);
+  // Empty groups tracking (global - groups with no tiles assigned)
+  private emptyGroups: Set<string> = new Set();
+
+  // Group colors (global - each group has one color)
+  private groupColors: Map<string, THREE.Color> = new Map();
+
+  // Group visibility (global)
+  private groupVisibility: Map<string, boolean> = new Map();
 
   // Shadcn-inspired color palette
   private colorPalette: number[] = [
@@ -283,7 +280,7 @@ export class ConnectorBuilderUI {
     // Initialize debug grid (for voxel boundaries visualization)
     this.debugGrid = new DebugGrid(this.scene, 2);
 
-    this.jsConfetti = new JSConfetti();
+    // jsConfetti initialization removed
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
 
@@ -354,8 +351,48 @@ export class ConnectorBuilderUI {
             Only affects tiles not manually moved
           </div>
         </div>
+        
 
       <div id="builder-section" style="display: none">
+
+       <div class="section">
+          <h3>Connector Groups</h3>
+          
+          <div style="margin-bottom: 12px">
+            <label style="display: block; margin-bottom: 5px; font-weight: 500">
+              Groups (click name to edit):
+            </label>
+            <div id="groups-list" style="max-height: 200px; overflow-y: auto; border: 1px solid #334155; border-radius: 4px; padding: 4px">
+              <em style="padding: 8px; display: block; color: #94a3b8">No groups</em>
+            </div>
+          </div>
+
+          <button id="create-group-btn" style="width: 100%">+ Create New Group</button>
+          
+          <div style="margin-top: 12px; margin-bottom: 8px">
+            <label style="display: block; margin-bottom: 5px; font-weight: 500">
+              Face for Operations:
+            </label>
+            <select id="face-selector" style="width: 100%; padding: 6px">
+              <option value="up">Up (Vertical)</option>
+              <option value="down">Down (Vertical)</option>
+              <option value="north">North (Horizontal)</option>
+              <option value="south">South (Horizontal)</option>
+              <option value="east">East (Horizontal)</option>
+              <option value="west">West (Horizontal)</option>
+            </select>
+            <div style="font-size: 10px; color: #94a3b8; margin-top: 5px">
+              Used for voxel colors and grid reform
+            </div>
+          </div>
+          
+          <button id="reform-grid-by-groups-btn" style="width: 100%">📐 Reform Grid by Groups</button>
+          <div style="font-size: 10px; color: #94a3b8; margin-top: 5px">
+            Arranges tiles into separate grids per connector group
+          </div>
+        </div>
+
+
         <div class="section">
           <h3>Selection</h3>
           <div class="selection-info" id="selection-info">
@@ -382,41 +419,39 @@ export class ConnectorBuilderUI {
               Set weight for selected tiles (affects spawn probability)
             </div>
           </div>
+
+          <div id="face-assignment-section" style="margin-top: 12px; margin-bottom: 8px; display: none">
+            <label style="display: block; margin-bottom: 8px; font-weight: 500">
+              Assign Groups to Faces:
+            </label>
+            <div style="display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: center">
+              <label style="font-size: 12px">Up:</label>
+              <select id="face-up-dropdown" class="face-dropdown" data-face="up" style="padding: 4px; font-size: 12px"></select>
+              
+              <label style="font-size: 12px">Down:</label>
+              <select id="face-down-dropdown" class="face-dropdown" data-face="down" style="padding: 4px; font-size: 12px"></select>
+              
+              <label style="font-size: 12px">North:</label>
+              <select id="face-north-dropdown" class="face-dropdown" data-face="north" style="padding: 4px; font-size: 12px"></select>
+              
+              <label style="font-size: 12px">South:</label>
+              <select id="face-south-dropdown" class="face-dropdown" data-face="south" style="padding: 4px; font-size: 12px"></select>
+              
+              <label style="font-size: 12px">East:</label>
+              <select id="face-east-dropdown" class="face-dropdown" data-face="east" style="padding: 4px; font-size: 12px"></select>
+              
+              <label style="font-size: 12px">West:</label>
+              <select id="face-west-dropdown" class="face-dropdown" data-face="west" style="padding: 4px; font-size: 12px"></select>
+            </div>
+            <div style="font-size: 10px; color: #94a3b8; margin-top: 5px">
+              Select group for each face of selected tiles
+            </div>
+          </div>
           
           <button id="clear-selection-btn">Clear Selection</button>
         </div>
 
-        <div class="section">
-          <h3>Connector Groups</h3>
-          
-          <div style="margin-bottom: 12px">
-            <label style="display: block; margin-bottom: 5px; font-weight: 500">Face:</label>
-            <select id="face-select" style="width: 100%; padding: 6px">
-              <option value="up">Up (Vertical)</option>
-              <option value="down">Down (Vertical)</option>
-              <option value="north">North (Horizontal)</option>
-              <option value="south">South (Horizontal)</option>
-              <option value="east">East (Horizontal)</option>
-              <option value="west">West (Horizontal)</option>
-            </select>
-          </div>
-
-          <div style="margin-bottom: 12px">
-            <label style="display: block; margin-bottom: 5px; font-weight: 500">
-              Groups (click name to edit):
-            </label>
-            <div id="groups-list" style="max-height: 200px; overflow-y: auto; border: 1px solid #334155; border-radius: 4px; padding: 4px">
-              <em style="padding: 8px; display: block; color: #94a3b8">No groups</em>
-            </div>
-          </div>
-
-          <button id="create-group-btn" style="width: 100%">+ Create New Group</button>
-          <button id="reform-grid-by-groups-btn" style="width: 100%; margin-top: 8px">📐 Reform Grid by Groups</button>
-          <div style="font-size: 10px; color: #94a3b8; margin-top: 5px">
-            Arranges tiles into separate grids per connector group
-          </div>
-        </div>
-
+       
         <div class="section">
           <h3>Symmetry & Rotation</h3>
           
@@ -493,7 +528,7 @@ export class ConnectorBuilderUI {
 
         <div class="section">
           <h3>Actions</h3>
-          <button id="auto-generate-btn" class="purple-btn">✨ Auto-Generate Adjacencies</button>
+          <!-- Auto-Generate Adjacencies removed: adjacencies are computed dynamically during WFC -->
           <button id="export-json-btn">Export JSON</button>
           <button id="export-glb-btn" class="success-btn">Save GLB Files</button>
         </div>
@@ -523,6 +558,20 @@ export class ConnectorBuilderUI {
     this.selectionBox.id = "selection-box";
     document.body.appendChild(this.selectionBox);
 
+    // Create resize handle
+    this.resizeHandle = document.createElement("div");
+    this.resizeHandle.id = "connector-ui-resize-handle";
+    this.uiContainer.appendChild(this.resizeHandle);
+
+    // Load saved width from localStorage
+    const savedWidth = localStorage.getItem("connectorBuilderWidth");
+    if (savedWidth) {
+      this.uiContainer.style.width = savedWidth + "px";
+    }
+
+    // Setup resize functionality
+    this.setupResizeHandle();
+
     // Get references to UI elements
     this.loadFilesBtn = document.getElementById(
       "load-files-btn"
@@ -546,25 +595,54 @@ export class ConnectorBuilderUI {
       "apply-weight-btn"
     ) as HTMLButtonElement;
 
+    // Face assignment dropdowns
+    this.faceAssignmentSection = document.getElementById(
+      "face-assignment-section"
+    ) as HTMLDivElement;
+    this.faceDropdowns = new Map([
+      ["up", document.getElementById("face-up-dropdown") as HTMLSelectElement],
+      [
+        "down",
+        document.getElementById("face-down-dropdown") as HTMLSelectElement,
+      ],
+      [
+        "north",
+        document.getElementById("face-north-dropdown") as HTMLSelectElement,
+      ],
+      [
+        "south",
+        document.getElementById("face-south-dropdown") as HTMLSelectElement,
+      ],
+      [
+        "east",
+        document.getElementById("face-east-dropdown") as HTMLSelectElement,
+      ],
+      [
+        "west",
+        document.getElementById("face-west-dropdown") as HTMLSelectElement,
+      ],
+    ]);
+
     // Connector Groups UI
-    this.faceSelect = document.getElementById(
-      "face-select"
-    ) as HTMLSelectElement;
     this.groupsList = document.getElementById("groups-list") as HTMLDivElement;
     this.createGroupBtn = document.getElementById(
       "create-group-btn"
     ) as HTMLButtonElement;
+    this.faceSelector = document.getElementById(
+      "face-selector"
+    ) as HTMLSelectElement;
     this.reformGridByGroupsBtn = document.getElementById(
       "reform-grid-by-groups-btn"
     ) as HTMLButtonElement;
 
     // Symmetry & Rotation UI
-    this.rotationSection = document.getElementById(
-      "rotation-section"
-    ) as HTMLDivElement;
-    this.symmetrySection = document.getElementById(
-      "symmetry-section"
-    ) as HTMLDivElement;
+    // TODO: Will restore these in next refactor
+    // this.rotationSection = document.getElementById(
+    //   "rotation-section"
+    // ) as HTMLDivElement;
+    // this.symmetrySection = document.getElementById(
+    //   "symmetry-section"
+    // ) as HTMLDivElement;
     this.applyRotationBtn = document.getElementById(
       "apply-rotation-btn"
     ) as HTMLButtonElement;
@@ -607,9 +685,7 @@ export class ConnectorBuilderUI {
     this.autoLayoutBtn = document.getElementById(
       "auto-layout-btn"
     ) as HTMLButtonElement;
-    this.autoGenerateBtn = document.getElementById(
-      "auto-generate-btn"
-    ) as HTMLButtonElement;
+    // Auto-generate button removed
     this.exportJsonBtn = document.getElementById(
       "export-json-btn"
     ) as HTMLButtonElement;
@@ -626,6 +702,55 @@ export class ConnectorBuilderUI {
 
     // Disable exclusion mode checkbox initially (no tiles selected yet)
     this.exclusionModeCheckbox.disabled = true;
+  }
+
+  private setupResizeHandle(): void {
+    const handleMouseDown = (e: MouseEvent) => {
+      this.isResizing = true;
+      this.resizeStartX = e.clientX;
+      this.resizeStartWidth = this.uiContainer.offsetWidth;
+      this.resizeHandle.classList.add("resizing");
+
+      // Prevent text selection during resize
+      e.preventDefault();
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "ew-resize";
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!this.isResizing) return;
+
+      // Calculate new width (drag left to increase, right to decrease)
+      const deltaX = this.resizeStartX - e.clientX;
+      const newWidth = this.resizeStartWidth + deltaX;
+
+      // Constrain to min/max
+      const minWidth = 300;
+      const maxWidth = 800;
+      const constrainedWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
+
+      this.uiContainer.style.width = constrainedWidth + "px";
+    };
+
+    const handleMouseUp = () => {
+      if (this.isResizing) {
+        this.isResizing = false;
+        this.resizeHandle.classList.remove("resizing");
+        document.body.style.userSelect = "";
+        document.body.style.cursor = "";
+
+        // Save width to localStorage
+        localStorage.setItem(
+          "connectorBuilderWidth",
+          this.uiContainer.offsetWidth.toString()
+        );
+      }
+    };
+
+    // Add event listeners
+    this.resizeHandle.addEventListener("mousedown", handleMouseDown);
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
   }
 
   private setupEventListeners(): void {
@@ -658,17 +783,24 @@ export class ConnectorBuilderUI {
     );
     this.applyWeightBtn.addEventListener("click", () => this.applyWeight());
 
+    // Face assignment dropdown handlers
+    for (const [face, dropdown] of this.faceDropdowns) {
+      dropdown.addEventListener("change", () => {
+        const groupId = dropdown.value;
+        if (groupId && this.selectedTiles.size > 0) {
+          this.assignGroupToFace(groupId, face);
+        }
+      });
+    }
+
     // Connector Groups UI
-    this.faceSelect.addEventListener("change", () => {
-      this.updateGroupsForFace();
+    this.createGroupBtn.addEventListener("click", () => this.createGroup());
+    this.faceSelector.addEventListener("change", () => {
       // Update voxel colors when face changes
       if (this.showVoxelDebugToggle.checked) {
         this.updateVoxelDebug();
       }
-      // Update exclusion UI when face changes
-      this.updateExclusionUI();
     });
-    this.createGroupBtn.addEventListener("click", () => this.createGroup());
     this.reformGridByGroupsBtn.addEventListener("click", () =>
       this.reformGridByGroups()
     );
@@ -680,12 +812,8 @@ export class ConnectorBuilderUI {
       if (target.classList.contains("color-thumbnail")) {
         const groupId = target.dataset.groupId;
         if (groupId) {
-          const face = this.getCurrentFace();
-          this.changeGroupColor(face, groupId);
+          this.changeGroupColor(groupId);
         }
-      } else if (target.classList.contains("assign-btn")) {
-        const groupId = target.dataset.groupId;
-        if (groupId) this.assignToGroup(groupId);
       } else if (target.classList.contains("delete-btn")) {
         const groupId = target.dataset.groupId;
         const button = target as HTMLButtonElement;
@@ -722,6 +850,20 @@ export class ConnectorBuilderUI {
       if (target.classList.contains("group-name-edit") && e.key === "Enter") {
         e.preventDefault();
         target.blur();
+      }
+    });
+
+    // Visibility toggle handler (global visibility)
+    this.groupsList.addEventListener("change", (e) => {
+      const target = e.target as HTMLInputElement;
+      if (target.classList.contains("visibility-toggle")) {
+        const groupId = target.dataset.groupId;
+        if (groupId) {
+          this.setGroupVisibility(groupId, target.checked);
+          console.log(
+            `👁️ Group "${groupId}" visibility: ${target.checked ? "ON" : "OFF"}`
+          );
+        }
       }
     });
 
@@ -786,9 +928,7 @@ export class ConnectorBuilderUI {
     this.autoLayoutBtn.addEventListener("click", () => this.applyGridLayout());
 
     // Actions
-    this.autoGenerateBtn.addEventListener("click", () =>
-      this.autoGenerateAdjacencies()
-    );
+    // Auto-generate listener removed
     this.exportJsonBtn.addEventListener("click", () => this.handleExportJSON());
     this.exportGlbBtn.addEventListener("click", () => this.handleExportGLB());
 
@@ -981,8 +1121,8 @@ export class ConnectorBuilderUI {
     // Apply grid layout to arrange tiles in a square grid
     this.applyGridLayout();
 
-    // Initialize groups UI for the default face
-    this.updateGroupsForFace();
+    // Initialize groups UI
+    this.updateGroupsList();
   }
 
   private applyGridLayout(): void {
@@ -1044,7 +1184,7 @@ export class ConnectorBuilderUI {
   }
 
   private reformGridByGroups(): void {
-    const currentFace = this.getCurrentFace();
+    const currentFace = this.getSelectedFace();
 
     // Group tiles by their connector group ID for the current face
     const tilesByGroup = new Map<string, ConnectorTile[]>();
@@ -1208,6 +1348,38 @@ export class ConnectorBuilderUI {
       // Attach transform controls to helper
       this.transformControls.attach(this.transformHelper);
     }
+  }
+
+  private setCameraView(
+    position: THREE.Vector3,
+    target: THREE.Vector3,
+    duration: number = 500
+  ): void {
+    const startPosition = this.camera.position.clone();
+    const startTarget = this.orbitControls.target.clone();
+    const startTime = performance.now();
+
+    const animate = () => {
+      const elapsed = performance.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+
+      // Smooth easing (ease-in-out cubic)
+      const eased =
+        progress < 0.5
+          ? 4 * progress * progress * progress
+          : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+
+      // Interpolate camera position and target
+      this.camera.position.lerpVectors(startPosition, position, eased);
+      this.orbitControls.target.lerpVectors(startTarget, target, eased);
+      this.orbitControls.update();
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+
+    animate();
   }
 
   private onMouseDown(event: MouseEvent): void {
@@ -1479,12 +1651,19 @@ export class ConnectorBuilderUI {
       // Enable weight controls
       this.weightInput.disabled = false;
       this.applyWeightBtn.disabled = false;
+
+      // Show and populate face dropdowns
+      this.faceAssignmentSection.style.display = "block";
+      this.updateFaceDropdowns();
     } else {
       // No selection - reset and disable
       this.weightInput.value = "1";
       this.weightInput.placeholder = "1.0";
       this.weightInput.disabled = true;
       this.applyWeightBtn.disabled = true;
+
+      // Hide face dropdowns
+      this.faceAssignmentSection.style.display = "none";
     }
 
     // Update groups list to highlight groups used by selection
@@ -1598,16 +1777,11 @@ export class ConnectorBuilderUI {
     });
   }
 
-  private getOrAssignGroupColor(
-    face: keyof TileConnectors,
-    groupId: string
-  ): THREE.Color {
-    const faceColors = this.groupColors.get(face)!;
-
-    if (!faceColors.has(groupId)) {
-      // Get colors already used for this face
+  private getOrAssignGroupColor(groupId: string): THREE.Color {
+    if (!this.groupColors.has(groupId)) {
+      // Get colors already used
       const usedColors = new Set(
-        Array.from(faceColors.values()).map((c) => c.getHex())
+        Array.from(this.groupColors.values()).map((c) => c.getHex())
       );
 
       // Find available colors
@@ -1622,15 +1796,54 @@ export class ConnectorBuilderUI {
       const colorHex = colorPool[randomIndex];
 
       const color = new THREE.Color(colorHex);
-      faceColors.set(groupId, color);
+      this.groupColors.set(groupId, color);
     }
 
-    return faceColors.get(groupId)!;
+    return this.groupColors.get(groupId)!;
   }
 
-  private changeGroupColor(face: keyof TileConnectors, groupId: string): void {
-    const faceColors = this.groupColors.get(face)!;
+  private isGroupVisible(groupId: string): boolean {
+    // Default to visible if not explicitly set
+    return this.groupVisibility.get(groupId) ?? true;
+  }
 
+  private setGroupVisibility(groupId: string, visible: boolean): void {
+    this.groupVisibility.set(groupId, visible);
+
+    // Update tile visibility - hide tile if ANY of its faces use this group
+    for (const tile of this.tiles.values()) {
+      const usesGroup =
+        tile.connectors.up.groupId === groupId ||
+        tile.connectors.down.groupId === groupId ||
+        tile.connectors.north.groupId === groupId ||
+        tile.connectors.south.groupId === groupId ||
+        tile.connectors.east.groupId === groupId ||
+        tile.connectors.west.groupId === groupId;
+
+      if (usesGroup) {
+        tile.visible = visible;
+        tile.voxelCell.visible = visible;
+      }
+    }
+
+    // Clear selection of hidden tiles
+    const tilesToDeselect: string[] = [];
+    for (const tileId of this.selectedTiles) {
+      const tile = this.tiles.get(tileId);
+      if (tile && !tile.visible) {
+        tilesToDeselect.push(tileId);
+      }
+    }
+    tilesToDeselect.forEach((id) => this.selectedTiles.delete(id));
+
+    // Update UI
+    this.updateSelection();
+    if (this.showVoxelDebugToggle.checked) {
+      this.updateVoxelDebug();
+    }
+  }
+
+  private changeGroupColor(groupId: string): void {
     // Create color picker modal
     const modal = document.createElement("div");
     modal.style.cssText = `
@@ -1702,7 +1915,7 @@ export class ConnectorBuilderUI {
       };
 
       colorBtn.onclick = () => {
-        faceColors.set(groupId, color.clone());
+        this.groupColors.set(groupId, color.clone());
         document.body.removeChild(modal);
         this.updateGroupsList();
 
@@ -1732,47 +1945,120 @@ export class ConnectorBuilderUI {
     // Clear existing debug visualization
     this.debugGrid.clear();
 
-    // Get current face for coloring
-    const currentFace = this.getCurrentFace();
+    const halfSize = this.voxelSize / 2;
+    const visibleTiles = Array.from(this.tiles.values()).filter(
+      (t) => t.visible
+    );
 
-    // Create voxel boundaries for all visible tiles
-    for (const tile of this.tiles.values()) {
-      if (!tile.visible) continue;
+    if (visibleTiles.length === 0) return;
 
-      // Get group color for current face
-      const groupId = tile.connectors[currentFace].groupId;
-      const groupColor = this.getOrAssignGroupColor(currentFace, groupId);
+    // Define face configurations
+    const faceConfigs: Array<{
+      direction: keyof TileConnectors;
+      position: THREE.Vector3;
+      rotation: THREE.Euler;
+    }> = [
+      {
+        direction: "up",
+        position: new THREE.Vector3(0, halfSize, 0),
+        rotation: new THREE.Euler(-Math.PI / 2, 0, 0),
+      },
+      {
+        direction: "down",
+        position: new THREE.Vector3(0, -halfSize, 0),
+        rotation: new THREE.Euler(Math.PI / 2, 0, 0),
+      },
+      {
+        direction: "north",
+        position: new THREE.Vector3(0, 0, halfSize),
+        rotation: new THREE.Euler(0, 0, 0),
+      },
+      {
+        direction: "south",
+        position: new THREE.Vector3(0, 0, -halfSize),
+        rotation: new THREE.Euler(0, Math.PI, 0),
+      },
+      {
+        direction: "east",
+        position: new THREE.Vector3(halfSize, 0, 0),
+        rotation: new THREE.Euler(0, Math.PI / 2, 0),
+      },
+      {
+        direction: "west",
+        position: new THREE.Vector3(-halfSize, 0, 0),
+        rotation: new THREE.Euler(0, -Math.PI / 2, 0),
+      },
+    ];
 
-      // Create material for this tile with group color
-      const material = new THREE.LineBasicMaterial({
-        color: groupColor,
-        transparent: true,
-        opacity: 0.7,
-        linewidth: 2,
-      });
+    // Total instances needed: 6 faces per tile
+    const instanceCount = visibleTiles.length * 6;
 
-      // Create box geometry at tile's current position
-      const geometry = new THREE.BoxGeometry(
-        this.voxelSize,
-        this.voxelSize,
-        this.voxelSize
-      );
-      const edges = new THREE.EdgesGeometry(geometry);
-      const line = new THREE.LineSegments(edges, material);
+    // Create instanced mesh for planes
+    const planeGeometry = new THREE.PlaneGeometry(
+      this.voxelSize,
+      this.voxelSize
+    );
+    const planeMaterial = new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0.4,
+      side: THREE.DoubleSide,
+      wireframe: true,
+    });
+    const planeInstances = new THREE.InstancedMesh(
+      planeGeometry,
+      planeMaterial,
+      instanceCount
+    );
 
-      // Position at voxel cell's position
-      line.position.copy(tile.voxelCell.position);
+    // Set up matrices and colors for each instance
+    const matrix = new THREE.Matrix4();
+    const scale = new THREE.Vector3(0.95, 0.95, 0.95);
+    const color = new THREE.Color();
 
-      // Add to debug grid's internal group
-      const gridGroup = this.scene.getObjectByName("debug_grid");
-      if (gridGroup) {
-        gridGroup.add(line);
+    let instanceIndex = 0;
+    for (const tile of visibleTiles) {
+      const tilePos = tile.voxelCell.position;
+
+      for (const faceConfig of faceConfigs) {
+        const groupId = tile.connectors[faceConfig.direction].groupId;
+        const groupColor = this.getOrAssignGroupColor(groupId);
+
+        // Calculate final position (tile position + face offset)
+        const finalPos = new THREE.Vector3()
+          .copy(faceConfig.position)
+          .add(tilePos);
+
+        // Create transformation matrix
+        matrix.compose(
+          finalPos,
+          new THREE.Quaternion().setFromEuler(faceConfig.rotation),
+          scale
+        );
+
+        // Set matrix for both plane and edge instances
+        planeInstances.setMatrixAt(instanceIndex, matrix);
+
+        // Set color for both instances
+        color.copy(groupColor);
+        planeInstances.setColorAt(instanceIndex, color);
+
+        instanceIndex++;
       }
-
-      // Clean up temporary geometries
-      geometry.dispose();
-      edges.dispose();
     }
+
+    // Mark instance attributes as needing update
+    planeInstances.instanceMatrix.needsUpdate = true;
+    if (planeInstances.instanceColor)
+      planeInstances.instanceColor.needsUpdate = true;
+
+    // Add to debug grid's internal group
+    const gridGroup = this.scene.getObjectByName("debug_grid");
+    if (gridGroup) {
+      gridGroup.add(planeInstances);
+    }
+
+    // Cleanup geometries (instances keep references)
+    planeGeometry.dispose();
   }
 
   private clearSelection(): void {
@@ -1790,37 +2076,37 @@ export class ConnectorBuilderUI {
   }
 
   // ====================
-  // Connector Groups Management (New Inline UI)
+  // Connector Groups Management (Global Groups)
   // ====================
 
-  private getCurrentFace(): keyof TileConnectors {
-    return this.faceSelect.value as keyof TileConnectors;
+  // Get the currently selected face from the face selector dropdown
+  private getSelectedFace(): keyof TileConnectors {
+    return this.faceSelector.value as keyof TileConnectors;
   }
 
-  private updateGroupsForFace(): void {
-    const face = this.getCurrentFace();
+  private getAllGroupIds(): Set<string> {
+    const groups = new Set<string>();
 
-    // Update rotation/symmetry section visibility
-    if (face === "up" || face === "down") {
-      this.rotationSection.style.display = "block";
-      this.symmetrySection.style.display = "none";
-    } else {
-      this.rotationSection.style.display = "none";
-      this.symmetrySection.style.display = "block";
+    // Collect all groups from all tiles on all faces
+    for (const tile of this.tiles.values()) {
+      groups.add(tile.connectors.up.groupId);
+      groups.add(tile.connectors.down.groupId);
+      groups.add(tile.connectors.north.groupId);
+      groups.add(tile.connectors.south.groupId);
+      groups.add(tile.connectors.east.groupId);
+      groups.add(tile.connectors.west.groupId);
     }
 
-    // Update groups list
-    this.updateGroupsList();
+    // Add empty groups
+    for (const groupId of this.emptyGroups) {
+      groups.add(groupId);
+    }
 
-    // Update button states
-    const hasSelection = this.selectedTiles.size > 0;
-    this.applyRotationBtn.disabled = !hasSelection;
-    this.applySymmetryBtn.disabled = !hasSelection;
+    return groups;
   }
 
   private updateGroupsList(): void {
-    const face = this.getCurrentFace();
-    const groupIds = this.getAllGroupIdsForFace(face);
+    const groupIds = this.getAllGroupIds();
 
     if (groupIds.size === 0) {
       this.groupsList.innerHTML =
@@ -1828,13 +2114,23 @@ export class ConnectorBuilderUI {
       return;
     }
 
-    // Get groups used by currently selected tiles
+    // Get groups used by currently selected tiles (on any face)
     const selectedGroups = new Set<string>();
     if (this.selectedTiles.size > 0) {
+      const faces: Array<keyof TileConnectors> = [
+        "up",
+        "down",
+        "north",
+        "south",
+        "east",
+        "west",
+      ];
       for (const tileId of this.selectedTiles) {
         const tile = this.tiles.get(tileId);
         if (tile) {
-          selectedGroups.add(tile.connectors[face].groupId);
+          for (const face of faces) {
+            selectedGroups.add(tile.connectors[face].groupId);
+          }
         }
       }
     }
@@ -1843,11 +2139,12 @@ export class ConnectorBuilderUI {
     let html = "";
 
     for (const groupId of groupsArray) {
-      const tileCount = this.getTileCountInGroup(face, groupId);
+      const tileCount = this.getTileCountInGroup(groupId);
+      const faceCount = this.getFaceCountForGroup(groupId);
       const isUsedBySelection = selectedGroups.has(groupId);
 
       // Get color for this group
-      const groupColor = this.getOrAssignGroupColor(face, groupId);
+      const groupColor = this.getOrAssignGroupColor(groupId);
       const colorHex = "#" + groupColor.getHexString();
 
       // Check if this is an empty group
@@ -1872,10 +2169,18 @@ export class ConnectorBuilderUI {
           title="${
             isEmpty
               ? "Empty group - click to select"
-              : `Click to select all ${tileCount} tiles`
+              : `Click to select all ${tileCount} tiles (${faceCount} face assignments)`
           }"
         >
           <div style="flex: 1; display: flex; align-items: center; gap: 8px; pointer-events: none;">
+            <input 
+              type="checkbox" 
+              class="visibility-toggle" 
+              data-group-id="${groupId}"
+              ${this.isGroupVisible(groupId) ? "checked" : ""}
+              style="cursor: pointer; pointer-events: auto;"
+              title="Toggle visibility"
+            />
             <div 
               class="color-thumbnail" 
               data-group-id="${groupId}"
@@ -1906,19 +2211,9 @@ export class ConnectorBuilderUI {
               "
               onmousedown="event.stopPropagation()"
             >${groupId}</span>
-            <span style="color: #94a3b8; font-size: 11px; white-space: nowrap">${tileCount} tiles</span>
+            <span style="color: #94a3b8; font-size: 11px; white-space: nowrap">${tileCount} tiles / ${faceCount} faces</span>
           </div>
           <div style="display: flex; gap: 4px; pointer-events: auto;">
-            <button class="assign-btn" data-group-id="${groupId}" style="
-              padding: 3px 10px;
-              font-size: 11px;
-              background: #10b981;
-              border: none;
-              border-radius: 3px;
-              color: white;
-              cursor: pointer;
-              white-space: nowrap;
-            ">Assign</button>
             <button class="delete-btn" data-group-id="${groupId}" ${
         isEmpty ? "" : "disabled"
       } style="
@@ -1943,58 +2238,63 @@ export class ConnectorBuilderUI {
     this.groupsList.innerHTML = html;
   }
 
-  private getAllGroupIdsForFace(face: keyof TileConnectors): Set<string> {
-    const groupIds = new Set<string>();
-
-    // Add groups from tiles
-    for (const tile of this.tiles.values()) {
-      groupIds.add(tile.connectors[face].groupId);
-    }
-
-    // Add empty groups
-    const faceEmptyGroups = this.emptyGroups.get(face);
-    if (faceEmptyGroups) {
-      for (const emptyGroup of faceEmptyGroups) {
-        groupIds.add(emptyGroup);
-      }
-    }
-
-    return groupIds;
-  }
-
-  private getTileCountInGroup(
-    face: keyof TileConnectors,
-    groupId: string
-  ): number {
+  private getTileCountInGroup(groupId: string): number {
     let count = 0;
     for (const tile of this.tiles.values()) {
-      if (tile.connectors[face].groupId === groupId) {
-        count++;
+      // Check if this group is used on ANY face of the tile
+      const faces: Array<keyof TileConnectors> = [
+        "up",
+        "down",
+        "north",
+        "south",
+        "east",
+        "west",
+      ];
+      for (const face of faces) {
+        if (tile.connectors[face].groupId === groupId) {
+          count++;
+          break; // Count each tile only once
+        }
+      }
+    }
+    return count;
+  }
+
+  private getFaceCountForGroup(groupId: string): number {
+    let count = 0;
+    const faces: Array<keyof TileConnectors> = [
+      "up",
+      "down",
+      "north",
+      "south",
+      "east",
+      "west",
+    ];
+
+    for (const tile of this.tiles.values()) {
+      for (const face of faces) {
+        if (tile.connectors[face].groupId === groupId) {
+          count++; // Count each face assignment
+        }
       }
     }
     return count;
   }
 
   private createGroup(): void {
-    const face = this.getCurrentFace();
-
     // Generate unique group name
     const name = `group_${this.nextGroupId}`;
     this.nextGroupId++;
 
-    // Add to empty groups for this face
-    const faceEmptyGroups = this.emptyGroups.get(face);
-    if (faceEmptyGroups) {
-      faceEmptyGroups.add(name);
-    }
+    // Add to empty groups (global)
+    this.emptyGroups.add(name);
 
     console.log(`✓ Created empty group "${name}"`);
     this.updateGroupsList();
   }
 
   private renameGroup(oldGroupId: string, newGroupId: string): void {
-    const face = this.getCurrentFace();
-    const existingGroups = this.getAllGroupIdsForFace(face);
+    const existingGroups = this.getAllGroupIds();
 
     if (existingGroups.has(newGroupId) && newGroupId !== oldGroupId) {
       alert("A group with this name already exists");
@@ -2002,28 +2302,36 @@ export class ConnectorBuilderUI {
       return;
     }
 
-    // Update tiles using this group
+    // Update tiles using this group on ANY face
     let updatedCount = 0;
+    const faces: Array<keyof TileConnectors> = [
+      "up",
+      "down",
+      "north",
+      "south",
+      "east",
+      "west",
+    ];
     for (const tile of this.tiles.values()) {
-      if (tile.connectors[face].groupId === oldGroupId) {
-        tile.connectors[face].groupId = newGroupId;
-        updatedCount++;
+      for (const face of faces) {
+        if (tile.connectors[face].groupId === oldGroupId) {
+          tile.connectors[face].groupId = newGroupId;
+          updatedCount++;
+        }
       }
     }
 
     // Update empty groups if this is an empty group
-    const faceEmptyGroups = this.emptyGroups.get(face);
-    if (faceEmptyGroups && faceEmptyGroups.has(oldGroupId)) {
-      faceEmptyGroups.delete(oldGroupId);
-      faceEmptyGroups.add(newGroupId);
+    if (this.emptyGroups.has(oldGroupId)) {
+      this.emptyGroups.delete(oldGroupId);
+      this.emptyGroups.add(newGroupId);
     }
 
     // Transfer color from old group to new group
-    const faceColors = this.groupColors.get(face)!;
-    if (faceColors.has(oldGroupId)) {
-      const color = faceColors.get(oldGroupId)!;
-      faceColors.delete(oldGroupId);
-      faceColors.set(newGroupId, color);
+    if (this.groupColors.has(oldGroupId)) {
+      const color = this.groupColors.get(oldGroupId)!;
+      this.groupColors.delete(oldGroupId);
+      this.groupColors.set(newGroupId, color);
     }
 
     console.log(
@@ -2038,64 +2346,28 @@ export class ConnectorBuilderUI {
   }
 
   private deleteGroup(groupId: string): void {
-    const face = this.getCurrentFace();
-    const tileCount = this.getTileCountInGroup(face, groupId);
+    const tileCount = this.getTileCountInGroup(groupId);
 
     // Only allow deleting empty groups (button should be disabled for non-empty)
     if (tileCount > 0) {
       console.warn(
-        `⚠ Cannot delete group "${groupId}": ${tileCount} tiles assigned`
+        `⚠ Cannot delete group "${groupId}": Used by ${tileCount} tile(s)`
       );
       return;
     }
 
     // Remove from empty groups and clean up color
-    const faceEmptyGroups = this.emptyGroups.get(face);
-    if (faceEmptyGroups) {
-      faceEmptyGroups.delete(groupId);
-    }
-
-    const faceColors = this.groupColors.get(face)!;
-    faceColors.delete(groupId);
+    this.emptyGroups.delete(groupId);
+    this.groupColors.delete(groupId);
 
     console.log(`✓ Deleted empty group "${groupId}"`);
     this.updateGroupsList();
   }
 
-  private assignToGroup(groupId: string): void {
-    if (this.selectedTiles.size === 0) {
-      alert("Please select tiles first");
-      return;
-    }
-
-    const face = this.getCurrentFace();
-
-    for (const tileId of this.selectedTiles) {
-      const tile = this.tiles.get(tileId);
-      if (tile) {
-        tile.connectors[face].groupId = groupId;
-      }
-    }
-
-    // Remove from empty groups if it was empty
-    const faceEmptyGroups = this.emptyGroups.get(face);
-    if (faceEmptyGroups && faceEmptyGroups.has(groupId)) {
-      faceEmptyGroups.delete(groupId);
-    }
-
-    console.log(
-      `✓ Assigned ${this.selectedTiles.size} tiles to group "${groupId}"`
-    );
-    this.updateGroupsList();
-
-    // Update voxel colors to reflect new group assignment
-    if (this.showVoxelDebugToggle.checked) {
-      this.updateVoxelDebug();
-    }
-  }
+  // Removed: Old assignToGroup method - now using assignGroupToFace with explicit face parameter
 
   private selectAllInGroup(groupId: string): void {
-    const face = this.getCurrentFace();
+    const face = this.getSelectedFace();
 
     this.selectedTiles.clear();
 
@@ -2116,6 +2388,101 @@ export class ConnectorBuilderUI {
     this.updateSelection();
   }
 
+  private assignGroupToFace(groupId: string, face: keyof TileConnectors): void {
+    // Track old groups before reassignment
+    const oldGroups = new Set<string>();
+    for (const tileId of this.selectedTiles) {
+      const tile = this.tiles.get(tileId);
+      if (tile) {
+        oldGroups.add(tile.connectors[face].groupId);
+      }
+    }
+
+    // Assign the group to the specified face of all selected tiles
+    for (const tileId of this.selectedTiles) {
+      const tile = this.tiles.get(tileId);
+      if (tile) {
+        tile.connectors[face].groupId = groupId;
+      }
+    }
+
+    // Remove the newly assigned group from empty groups (it's no longer empty)
+    this.emptyGroups.delete(groupId);
+
+    // Check if any old groups became empty and add them to emptyGroups
+    for (const oldGroupId of oldGroups) {
+      if (oldGroupId === groupId) continue; // Skip if it's the same group
+
+      const tileCount = this.getTileCountInGroup(oldGroupId);
+      if (tileCount === 0) {
+        this.emptyGroups.add(oldGroupId);
+        console.log(`✓ Group "${oldGroupId}" is now empty (not deleted)`);
+      }
+    }
+
+    console.log(
+      `✓ Assigned group "${groupId}" to ${face} face of ${this.selectedTiles.size} tiles`
+    );
+
+    // Update UI
+    this.updateGroupsList();
+    if (this.showVoxelDebugToggle.checked) {
+      this.updateVoxelDebug();
+    }
+  }
+
+  private updateFaceDropdowns(): void {
+    // Get all available groups
+    const allGroups = this.getAllGroupIds();
+
+    // Populate each dropdown with all available groups
+    for (const [face, dropdown] of this.faceDropdowns) {
+      // Clear existing options
+      dropdown.innerHTML = "";
+
+      // Add options for each group
+      for (const groupId of Array.from(allGroups).sort()) {
+        const option = document.createElement("option");
+        option.value = groupId;
+        option.textContent = groupId;
+        dropdown.appendChild(option);
+      }
+
+      // Set the selected value based on current selection
+      if (this.selectedTiles.size > 0) {
+        // Get the group ID for this face from the first selected tile
+        const firstTileId = Array.from(this.selectedTiles)[0];
+        const firstTile = this.tiles.get(firstTileId);
+
+        if (firstTile) {
+          const currentGroupId = firstTile.connectors[face].groupId;
+
+          // Check if all selected tiles have the same group for this face
+          let allSame = true;
+          for (const tileId of this.selectedTiles) {
+            const tile = this.tiles.get(tileId);
+            if (tile && tile.connectors[face].groupId !== currentGroupId) {
+              allSame = false;
+              break;
+            }
+          }
+
+          if (allSame) {
+            dropdown.value = currentGroupId;
+          } else {
+            // Mixed values - add a placeholder option
+            const mixedOption = document.createElement("option");
+            mixedOption.value = "";
+            mixedOption.textContent = "(Mixed)";
+            mixedOption.disabled = true;
+            mixedOption.selected = true;
+            dropdown.insertBefore(mixedOption, dropdown.firstChild);
+          }
+        }
+      }
+    }
+  }
+
   private applyRotation(): void {
     const rotationRadio = document.querySelector(
       'input[name="rotation"]:checked'
@@ -2127,7 +2494,7 @@ export class ConnectorBuilderUI {
     }
 
     const rotation = rotationRadio.value as ConnectorData["rotation"];
-    const face = this.getCurrentFace();
+    const face = this.getSelectedFace();
 
     if (face !== "up" && face !== "down") {
       alert("Rotation only applies to vertical faces (up/down)");
@@ -2157,7 +2524,7 @@ export class ConnectorBuilderUI {
     }
 
     const symmetry = symmetryRadio.value as ConnectorData["symmetry"];
-    const face = this.getCurrentFace();
+    const face = this.getSelectedFace();
 
     if (face === "up" || face === "down") {
       alert(
@@ -2358,6 +2725,40 @@ export class ConnectorBuilderUI {
       return;
     }
 
+    // Quick camera views (1-4)
+    if (event.key === "1") {
+      // Top view
+      const target = new THREE.Vector3(0, 0, 0);
+      const position = new THREE.Vector3(0, 20, 0);
+      this.setCameraView(position, target);
+      console.log("📷 Camera: Top view");
+      return;
+    }
+    if (event.key === "2") {
+      // Front view
+      const target = new THREE.Vector3(0, 0, 0);
+      const position = new THREE.Vector3(0, 5, 20);
+      this.setCameraView(position, target);
+      console.log("📷 Camera: Front view");
+      return;
+    }
+    if (event.key === "3") {
+      // Right side view
+      const target = new THREE.Vector3(0, 0, 0);
+      const position = new THREE.Vector3(20, 5, 0);
+      this.setCameraView(position, target);
+      console.log("📷 Camera: Right side view");
+      return;
+    }
+    if (event.key === "4") {
+      // Left side view
+      const target = new THREE.Vector3(0, 0, 0);
+      const position = new THREE.Vector3(-20, 5, 0);
+      this.setCameraView(position, target);
+      console.log("📷 Camera: Left side view");
+      return;
+    }
+
     // G - Toggle transform mode
     if (event.key === "g" || event.key === "G") {
       this.transformMode = !this.transformMode;
@@ -2395,23 +2796,49 @@ export class ConnectorBuilderUI {
     }
 
     // Get the current face direction
-    const direction = this.getCurrentFace();
+    const direction = this.getSelectedFace();
 
-    // Add exclusion to ALL selected tiles
+    // Add bidirectional exclusion to ALL selected tiles
+    const targetTile = this.tiles.get(targetTileId);
+    if (!targetTile) {
+      console.warn("Target tile not found");
+      return;
+    }
+
+    const oppositeDir = this.getOppositeDirection(direction);
     let addedCount = 0;
+
     for (const sourceTileId of this.selectedTiles) {
       const sourceTile = this.tiles.get(sourceTileId);
       if (sourceTile) {
-        // Check if exclusion already exists
-        const alreadyExists = sourceTile.exclusions.some(
+        // Check if forward exclusion already exists
+        const forwardExists = sourceTile.exclusions.some(
           (ex) => ex.targetTileId === targetTileId && ex.direction === direction
         );
 
-        if (!alreadyExists) {
+        // Check if reverse exclusion already exists
+        const reverseExists = targetTile.exclusions.some(
+          (ex) =>
+            ex.targetTileId === sourceTileId && ex.direction === oppositeDir
+        );
+
+        if (!forwardExists) {
+          // Add forward exclusion: sourceTile cannot be [direction] of targetTile
           sourceTile.exclusions.push({
             targetTileId: targetTileId,
             direction: direction,
           });
+        }
+
+        if (!reverseExists) {
+          // Add reverse exclusion: targetTile cannot be [oppositeDir] of sourceTile
+          targetTile.exclusions.push({
+            targetTileId: sourceTileId,
+            direction: oppositeDir,
+          });
+        }
+
+        if (!forwardExists || !reverseExists) {
           addedCount++;
         }
       }
@@ -2419,7 +2846,11 @@ export class ConnectorBuilderUI {
 
     if (addedCount > 0) {
       console.log(
-        `✓ Added exclusion to ${addedCount} tile(s): cannot be ${direction} of ${targetTileId}`
+        `✓ Added bidirectional exclusion for ${addedCount} tile(s): ${
+          this.selectedTiles.size > 0
+            ? Array.from(this.selectedTiles)[0]
+            : "selected"
+        } <-> ${targetTileId}`
       );
       this.updateExclusionsList();
     } else {
@@ -2440,7 +2871,7 @@ export class ConnectorBuilderUI {
       this.exclusionActiveInfo.style.display = "block";
       this.exclusionSelectedCount.textContent =
         this.selectedTiles.size.toString();
-      this.exclusionCurrentFace.textContent = this.getCurrentFace();
+      this.exclusionCurrentFace.textContent = this.getSelectedFace();
     }
   }
 
@@ -2496,126 +2927,14 @@ export class ConnectorBuilderUI {
     });
   }
 
-  // Auto-Generate Adjacencies
-  private autoGenerateAdjacencies(): void {
-    console.log("🔄 Auto-generating adjacencies from connectors...");
+  // Auto-Generate Adjacencies removed: adjacencies are computed dynamically during WFC
+  // The connector compatibility logic is now in WFCTile3D.canBeAdjacentTo()
 
-    // Clear existing adjacencies
-    for (const tile of this.tiles.values()) {
-      tile.adjacency.up.clear();
-      tile.adjacency.down.clear();
-      tile.adjacency.north.clear();
-      tile.adjacency.south.clear();
-      tile.adjacency.east.clear();
-      tile.adjacency.west.clear();
-    }
+  // Removed canConnect, checkRotationCompatibility, checkSymmetryCompatibility, hasExclusion
+  // These are now handled by WFCTile3D.canBeAdjacentTo()
 
-    const directions = [
-      "up",
-      "down",
-      "north",
-      "south",
-      "east",
-      "west",
-    ] as const;
-    let compatibleCount = 0;
-
-    // Check all tile pairs
-    for (const tileA of this.tiles.values()) {
-      for (const tileB of this.tiles.values()) {
-        for (const direction of directions) {
-          const oppositeDirection = OPPOSITE_DIRECTIONS[
-            direction
-          ] as keyof TileConnectors;
-
-          const connectorA = tileA.connectors[direction];
-          const connectorB = tileB.connectors[oppositeDirection];
-
-          // Check if connectors match
-          if (!this.canConnect(connectorA, connectorB, direction)) {
-            continue;
-          }
-
-          // Check exclusions
-          if (this.hasExclusion(tileA, tileB.id, direction)) {
-            continue;
-          }
-
-          // Add adjacency
-          tileA.adjacency[direction].add(tileB.id);
-          compatibleCount++;
-        }
-      }
-    }
-
-    console.log(`✓ Generated ${compatibleCount} adjacency connections`);
-    this.jsConfetti.addConfetti({
-      confettiColors: ["#667eea", "#764ba2", "#f093fb", "#4facfe"],
-      confettiRadius: 6,
-      confettiNumber: 300,
-    });
-    alert(`✨ Generated ${compatibleCount} adjacency connections!`);
-  }
-
-  private canConnect(
-    connectorA: ConnectorData,
-    connectorB: ConnectorData,
-    direction: string
-  ): boolean {
-    // Rule 1: Group IDs must match
-    if (connectorA.groupId !== connectorB.groupId) {
-      return false;
-    }
-
-    // Rule 2: Check symmetry/rotation compatibility
-    if (direction === "up" || direction === "down") {
-      // Vertical - check rotation
-      return this.checkRotationCompatibility(connectorA, connectorB);
-    } else {
-      // Horizontal - check symmetry
-      return this.checkSymmetryCompatibility(connectorA, connectorB);
-    }
-  }
-
-  private checkRotationCompatibility(
-    connA: ConnectorData,
-    connB: ConnectorData
-  ): boolean {
-    // If either is rotationally invariant, they match
-    if (connA.rotation === "invariant" || connB.rotation === "invariant") {
-      return true;
-    }
-
-    // Otherwise, rotation indices must match
-    return connA.rotation === connB.rotation;
-  }
-
-  private checkSymmetryCompatibility(
-    connA: ConnectorData,
-    connB: ConnectorData
-  ): boolean {
-    // If either is symmetric, they match
-    if (connA.symmetry === "symmetric" || connB.symmetry === "symmetric") {
-      return true;
-    }
-
-    // Flipped must pair with not-flipped, and vice versa
-    if (connA.symmetry === "flipped" && connB.symmetry === "not-flipped")
-      return true;
-    if (connA.symmetry === "not-flipped" && connB.symmetry === "flipped")
-      return true;
-
-    return false;
-  }
-
-  private hasExclusion(
-    sourceTile: ConnectorTile,
-    targetTileId: string,
-    direction: string
-  ): boolean {
-    return sourceTile.exclusions.some(
-      (ex) => ex.targetTileId === targetTileId && ex.direction === direction
-    );
+  private getOppositeDirection(direction: string): keyof TileConnectors {
+    return OPPOSITE_DIRECTIONS[direction] as keyof TileConnectors;
   }
 
   // Export Functions

@@ -103,57 +103,82 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       let success: boolean;
 
       // If assignedCells provided, only collapse those specific cells
-      if (message.assignedCells && message.assignedCells.length > 0) {
-        const totalCells = message.assignedCells.length;
-        let collapsedCount = 0;
-        let skippedPreCollapsed = 0;
-
-        // Collapse only assigned cells
-        for (const [x, y, z] of message.assignedCells) {
-          const cell = wfc.buffer.getCell(x, y, z);
-
-          // Skip if already collapsed (e.g., pre-collapsed boundary)
-          if (!cell || cell.collapsed) {
-            collapsedCount++;
-            skippedPreCollapsed++;
-            continue; // Don't send tile update for pre-collapsed cells
-          }
-
-          // Collapse this specific cell
-          const tileId = wfc.collapseCell(x, y, z);
-
-          if (tileId) {
-            collapsedCount++;
-
-            // Send tile update (only for newly collapsed cells)
-            const tileMsg: TileUpdateMessage = {
-              type: "tile_update",
-              x,
-              y,
-              z,
-              tileId,
-            };
-            self.postMessage(tileMsg);
-
-            // Send progress
-            const progressMsg: ProgressMessage = {
-              type: "progress",
-              progress: collapsedCount / totalCells,
-            };
-            self.postMessage(progressMsg);
-          } else {
-            // Contradiction - this shouldn't happen with proper boundaries
-            throw new Error(`Contradiction at (${x}, ${y}, ${z})`);
-          }
-        }
-
-        if (skippedPreCollapsed > 0) {
-          console.warn(
-            `Worker skipped ${skippedPreCollapsed} pre-collapsed cells that shouldn't have been assigned`
+      if (message.assignedCells !== undefined) {
+        // Worker has been given a specific cell assignment (may be empty for all-boundary regions)
+        if (message.assignedCells.length === 0) {
+          // No interior cells to collapse - this region is all boundaries
+          console.log(
+            "Worker has no assigned cells (all-boundary region), skipping"
           );
-        }
+          success = true;
+        } else {
+          // Collapse assigned cells
+          const totalCells = message.assignedCells.length;
+          let collapsedCount = 0;
+          let skippedPreCollapsed = 0;
+          const skippedCells: Array<[number, number, number]> = [];
+          const actuallyCollapsed: Array<[number, number, number, string]> = [];
 
-        success = true;
+          // Create a Set of assigned cell keys for quick lookup
+          const assignedSet = new Set(
+            message.assignedCells.map(([x, y, z]) => `${x},${y},${z}`)
+          );
+
+          // Collapse only assigned cells
+          for (const [x, y, z] of message.assignedCells) {
+            const cell = wfc.buffer.getCell(x, y, z);
+
+            // Skip if already collapsed (e.g., pre-collapsed boundary)
+            if (!cell || cell.collapsed) {
+              collapsedCount++;
+              skippedPreCollapsed++;
+              skippedCells.push([x, y, z]);
+              continue; // Don't send tile update for pre-collapsed cells
+            }
+
+            // Collapse this specific cell (may trigger propagation to neighbors)
+            const tileId = wfc.collapseCell(x, y, z);
+
+            if (tileId) {
+              collapsedCount++;
+              actuallyCollapsed.push([x, y, z, tileId]);
+
+              // Send tile update for this assigned cell
+              const tileMsg: TileUpdateMessage = {
+                type: "tile_update",
+                x,
+                y,
+                z,
+                tileId,
+              };
+              self.postMessage(tileMsg);
+
+              // Send progress
+              const progressMsg: ProgressMessage = {
+                type: "progress",
+                progress: collapsedCount / totalCells,
+              };
+              self.postMessage(progressMsg);
+            } else {
+              // Contradiction - this shouldn't happen with proper boundaries
+              throw new Error(`Contradiction at (${x}, ${y}, ${z})`);
+            }
+          }
+
+          if (skippedPreCollapsed > 0) {
+            console.warn(
+              `Worker skipped ${skippedPreCollapsed} pre-collapsed cells that shouldn't have been assigned`
+            );
+            console.warn(
+              `   First 10 skipped: ${skippedCells
+                .slice(0, 10)
+                .map((c) => `(${c[0]},${c[1]},${c[2]})`)
+                .join(", ")}`
+            );
+          }
+
+          success = true;
+        }
       } else {
         // Fallback: run normal generate (for single worker case)
         success = await wfc.generate(
